@@ -9,11 +9,13 @@ const DIGITS = /[\d,]+(?:\.\d{1,2})?/;
 // DD/MM/YYYY
 function fmtDateDDMMYYYY(iso){
   if(!iso) return '';
-  const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`;
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
 }
 function parseDDMM(dateStr){ // 28/02/2025 -> 2025-02-28
   const m = dateStr && dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if(!m) return ''; return `${m[3]}-${m[2]}-${m[1]}`;
+  if(!m) return '';
+  return `${m[3]}-${m[2]}-${m[1]}`;
 }
 
 // Date helpers
@@ -41,8 +43,11 @@ function ensureRecurringInstances(){
   const now = new Date();
   const horizon = 6; // months
   const templates = tasks.filter(t=>t.recur && !t.period);
+
   for (const tpl of templates){
-    const rid = tpl.recurringId || crypto.randomUUID(); tpl.recurringId = rid;
+    const rid = tpl.recurringId || crypto.randomUUID();
+    tpl.recurringId = rid;
+
     const recurDay = tpl.recurDay || (tpl.deadline ? Number(tpl.deadline.slice(8,10)) : now.getDate());
     tpl.recurDay = recurDay;
 
@@ -50,7 +55,8 @@ function ensureRecurringInstances(){
     const tplYM = tplDate.getFullYear()*12 + tplDate.getMonth();
     const nowYM = now.getFullYear()*12 + now.getMonth();
     const base = (tplYM >= nowYM) ? tplDate : now;
-    const baseY = base.getFullYear(), baseM = base.getMonth();
+    const baseY = base.getFullYear();
+    const baseM = base.getMonth();
 
     for (let i = 0; i < horizon; i++){
       const y = baseY + Math.floor((baseM + i)/12);
@@ -60,17 +66,29 @@ function ensureRecurringInstances(){
       const exists = tasks.some(t => t.period === period && t.recurringId === rid);
       if (!exists && !isSkipped(rid, period)){
         tasks.push({
-          id: crypto.randomUUID(), createdAt: Date.now(),
-          client: tpl.client, title: tpl.title, priority: tpl.priority,
-          assignee: tpl.assignee, status: 'Not Started', deadline: dl,
-          fee: Number(tpl.fee||0), advance: 0, invoiceStatus: 'Not Raised',
-          notes: tpl.notes||'', recur: true, recurDay, recurringId: rid, period
+          id: crypto.randomUUID(),
+          createdAt: Date.now(),
+          client: tpl.client,
+          title: tpl.title,
+          priority: tpl.priority,
+          assignee: tpl.assignee,
+          status: 'Not Started',
+          deadline: dl,
+          fee: Number(tpl.fee||0),
+          advance: 0,
+          invoiceStatus: 'Not Raised',
+          notes: tpl.notes||'',
+          recur: true,
+          recurDay,
+          recurringId: rid,
+          period
         });
       }
     }
   }
   save();
 }
+
 function syncSeriesFromTemplate(tpl){
   const rid = tpl.recurringId; if(!rid) return;
   const today = todayStr();
@@ -98,6 +116,7 @@ function updateSelectAllState(){
   const allChecked = visibleRows.length>0 && [...visibleIds].every(id=>selectedIds.has(id));
   $('#selectAll').checked = allChecked;
 }
+
 function bulkDelete(){
   const visibleRows = $$('#taskTbody tr');
   const visibleIds = new Set(visibleRows.map(r=>r.dataset.id));
@@ -123,6 +142,7 @@ function bulkDelete(){
 
 // ===== Rendering =====
 const tbody = document.getElementById('taskTbody');
+
 function render(){
   ensureRecurringInstances();
 
@@ -134,6 +154,7 @@ function render(){
   const mf = $('#monthFilter').value;
 
   let filtered = tasks.filter(t => !(t.recur && !t.period));
+
   filtered = filtered.filter(t => {
     const matchQ = !q || [t.client,t.title,t.assignee,(t.notes||'')].some(x => String(x).toLowerCase().includes(q));
     const matchP = !pf || t.priority===pf;
@@ -184,13 +205,17 @@ function render(){
   $('#kpiFee').textContent=fmtMoney(sumFee);
   $('#kpiAdv').textContent=fmtMoney(sumAdv);
   $('#kpiOut').textContent=fmtMoney(sumOut);
+
   updateSelectAllState();
 }
+
 function formatMonthLabel(m){
   const [y, mo] = m.split('-').map(Number);
   return new Date(y, mo-1, 1).toLocaleString('en-IN',{month:'short', year:'numeric'});
 }
+
 function prioRank(p){ return {High:1, Medium:2, Low:3}[p]||9; }
+
 function rowHtml(t){
   const out = (Number(t.fee||0) - Number(t.advance||0));
   const overdue = t.deadline && t.deadline < todayStr() && t.status !== 'Completed';
@@ -218,6 +243,7 @@ function rowHtml(t){
     <td><button class="btn ghost" onclick="editTask('${t.id}')">Edit</button></td>
   </tr>`;
 }
+
 function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;","<": "&lt;",">":"&gt;","\"":"&quot;"}[c]))}
 
 // ===== Actions =====
@@ -323,6 +349,7 @@ document.getElementById('taskForm').addEventListener('submit', e=>{
       tasks.push({id:crypto.randomUUID(), createdAt: Date.now(), ...data}); save();
     }
   }
+
   closeTaskModal(); render();
 });
 
@@ -433,12 +460,15 @@ function reindexServiceRows(){ [...serviceRows.children].forEach((r,i)=>{ r.firs
 // Invoice numbering (auto but editable)
 function currentFY(dateObj){
   const d = dateObj || new Date();
-  const y = d.getFullYear(); const m = d.getMonth();
+  const y = d.getFullYear();
+  const m = d.getMonth(); // 0=Jan
   return (m>=3) ? `${y}-${String(y+1).slice(-2)}` : `${y-1}-${String(y).slice(-2)}`;
 }
 function nextInvoiceSequence(){
-  const seqKey = 'ca-invoice-seq'; const fyKey  = 'ca-invoice-fy';
-  const today = new Date(); const fy = currentFY(today);
+  const seqKey = 'ca-invoice-seq';
+  const fyKey  = 'ca-invoice-fy';
+  const today = new Date();
+  const fy = currentFY(today);
   const storedFY = localStorage.getItem(fyKey);
   let seq = Number(localStorage.getItem(seqKey) || 0);
   if(storedFY !== fy){ seq = 0; }
@@ -454,8 +484,11 @@ function autoPopulateInvoiceMeta(){
   $('#invDate').value = todayStr();
   const { fy, seq } = nextInvoiceSequence();
   $('#invNumber').value = formatInvoiceNumber('INSIGHT', fy, seq);
-  serviceRows.innerHTML = ''; addServiceRow('', '');
-  $('#discountInput').value = 0; recomputeTotals();
+  // fresh default rows
+  serviceRows.innerHTML = '';
+  addServiceRow('', '');
+  $('#discountInput').value = 0;
+  recomputeTotals();
 }
 
 // Totals + words
@@ -480,7 +513,8 @@ function toIndianWords(num){
   const crore = Math.floor(num/10000000); num%=10000000;
   const lakh = Math.floor(num/100000); num%=100000;
   const thousand = Math.floor(num/1000); num%=1000;
-  const hundred = num; let out = '';
+  const hundred = num;
+  let out = '';
   if(crore) out += `${three(crore)} Crore `;
   if(lakh) out += `${three(lakh)} Lakh `;
   if(thousand) out += `${three(thousand)} Thousand `;
@@ -497,18 +531,22 @@ $('#previewInvoiceBtn').addEventListener('click', ()=>{
 // Download PDF (high DPI, Chrome/Firefox friendly)
 $('#downloadPdfBtn').addEventListener('click', async ()=>{
   bindInvoicePreview();
-  const page = $('.a4'); const holder = $('#invoiceA4');
-  holder.style.visibility = 'visible'; holder.style.left = '0'; holder.style.top = '0'; holder.style.position = 'fixed';
+  const page = $('.a4');
+  const holder = $('#invoiceA4');
+  holder.style.visibility = 'visible';
+  holder.style.left = '0'; holder.style.top = '0'; holder.style.position = 'fixed';
   const scale = Math.max(3, Math.ceil((window.devicePixelRatio || 1) * 2));
   const canvas = await html2canvas(page, { scale, useCORS: true, backgroundColor: '#FFFFFF', logging: false });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jspdf.jsPDF('p','mm','a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const imgWidth = pageWidth; const imgHeight = canvas.height * imgWidth / canvas.width;
+  const imgWidth = pageWidth;
+  const imgHeight = canvas.height * imgWidth / canvas.width;
   pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
   const name = `${($('#invNumber').value||'Invoice').replace(/[^\w\-]+/g,'_')}.pdf`;
   pdf.save(name);
-  holder.style.visibility = 'hidden'; holder.style.left = '-9999px'; holder.style.top = '-9999px';
+  holder.style.visibility = 'hidden';
+  holder.style.left = '-9999px'; holder.style.top = '-9999px';
 });
 
 // Bind data into the printable template
@@ -524,8 +562,9 @@ function bindInvoicePreview(){
   $$('[data-bind="discount"]').forEach(el => el.textContent = fmtMoney(Number($('#discountInput').value||0)));
   $$('[data-bind="grandTotal"]').forEach(el => el.textContent = $('#grandTotal').textContent || '0');
   $$('[data-bind="amountWords"]').forEach(el => el.textContent = $('#amountWords').textContent || '');
-  // Table rows
-  const tbody = $('[data-bind="rows"]'); tbody.innerHTML = '';
+  // rows
+  const tbody = $('[data-bind="rows"]');
+  tbody.innerHTML = '';
   $$('.inv-row', serviceRows).forEach((r,i)=>{
     const desc = r.querySelector('.svc-desc').value.trim();
     const amt  = Number(r.querySelector('.svc-amt').value||0);
@@ -562,30 +601,60 @@ $('#pdfInput').addEventListener('change', e=>{
 
 async function handlePdfFile(file){
   const log = $('#parseLog');
-  log.innerHTML = 'Reading PDF…';
   try{
-    const url = URL.createObjectURL(file);
-    // pdfjsLib is provided by the CDN script
-    const pdf = await pdfjsLib.getDocument({ url }).promise;
-    const page = await pdf.getPage(1);
-    const textContent = await page.getTextContent();
-    URL.revokeObjectURL(url);
+    log.innerHTML = 'Reading PDF…';
 
-    // Gather all text items in reading order
-    const fullText = textContent.items.map(i => (i.str||'').trim()).filter(Boolean).join('\n');
+    // Read file as ArrayBuffer to avoid blob URL/GC timing issues
+    const buf = await file.arrayBuffer();
 
-    // Parse with tolerant regexes based on our template labels
-    const parsed = parseInvoiceText(fullText);
+    // Ensure pdf.js worker is configured (defensive)
+    if (window.pdfjsLib && (!pdfjsLib.GlobalWorkerOptions.workerSrc || !/pdf\.worker/.test(pdfjsLib.GlobalWorkerOptions.workerSrc))) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js";
+    }
 
-    // Fill the Create Invoice form with the parsed data
+    // Load document
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+
+    // We expect a single page invoice; still, concatenate all pages’ text
+    let textAll = '';
+    for (let p = 1; p <= pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      textAll += tc.items.map(i => (i.str||'').trim()).filter(Boolean).join('\n') + '\n';
+    }
+
+    // If pdf.js extracted nothing (likely image-only PDF), OCR the first page
+    if (!textAll.trim()){
+      log.innerHTML = 'No embedded text found. Running OCR…';
+
+      const page1 = await pdf.getPage(1);
+      const viewport = page1.getViewport({ scale: 2.4 }); // high scale for better OCR
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      await page1.render({ canvasContext: ctx, viewport }).promise;
+
+      const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
+        logger: () => {} // mute
+      });
+      textAll = (text || '').replace(/\r/g,'').trim();
+    }
+
+    if (!textAll){
+      log.innerHTML = '<span style="color:#ffb4b4">Could not read this PDF. Ensure it was generated by this app and try again.</span>';
+      return;
+    }
+
+    // Parse and apply
+    const parsed = parseInvoiceText(textAll);
     applyParsedToForm(parsed);
-
-    // Done
     recomputeTotals();
     bindInvoicePreview();
+
     log.innerHTML = '<span style="color:#a6f3c1">Parsed successfully. Fields populated in Create Invoice.</span>';
-    // Close modal automatically after a beat
-    setTimeout(()=> editModal.classList.remove('active'), 800);
+    setTimeout(()=> editModal.classList.remove('active'), 900);
+
   }catch(err){
     console.error(err);
     log.innerHTML = '<span style="color:#ffb4b4">Could not read this PDF. Ensure it was generated by this app and try again.</span>';
@@ -594,62 +663,46 @@ async function handlePdfFile(file){
 
 // Parsing logic tailored to our invoice layout
 function parseInvoiceText(txt){
-  // Normalize spaces slightly for easier regex
-  const T = txt.replace(/\r/g,'').replace(/[ \t]+\n/g,'\n');
+  const T = (txt||'').replace(/\r/g,'').replace(/[ \t]+\n/g,'\n');
 
   function pick(re){ const m = T.match(re); return m ? (m[1]||'').trim() : ''; }
   function pickMoneyAfter(label){
-    // find label line and then the next number-looking token on following lines
     const re = new RegExp(`${label}[\\s\\S]*?(₹?\\s*${DIGITS.source})`,'i');
     const m = T.match(re);
     if(!m) return '';
     return (m[1]||'').replace(/[₹\s,]/g,'').trim();
   }
 
-  const invNo = pick(/Invoice No:\s*([^\n]+)/i);
-  const invDateDD = pick(/Invoice Date:\s*([0-9]{2}\/[0-9]{2}\/[0-9]{4})/i);
+  const invNo = pick(/Invoice\s*No:\s*([^\n]+)/i);
+  const invDateDD = pick(/Invoice\s*Date:\s*([0-9]{2}\/[0-9]{2}\/[0-9]{4})/i);
 
-  // Receiver details (capture block)
-  // We'll capture text between "Detail of Receiver" and the start of table ("S. No." or "Service Description")
+  // Receiver block
   const recvBlock = (() => {
-    const start = T.search(/Detail of Receiver/i);
+    const start = T.search(/Detail\s+of\s+Receiver/i);
     if(start<0) return '';
-    const end = T.search(/S\.\s*No\.|Service Description/i);
+    const end = T.search(/S\.\s*No\.|Service\s*Description/i);
     return end>start ? T.slice(start, end) : T.slice(start);
   })();
 
-  const name = (()=> {
-    const m = recvBlock.match(/Name:\s*([^\n]+)/i);
-    return m ? m[1].trim() : '';
-  })();
-  const email = (()=> {
-    const m = recvBlock.match(/E-?mail:\s*([^\n]+)/i);
-    return m ? m[1].trim() : '';
-  })();
-  const mobile = (()=> {
-    const m = recvBlock.match(/Mobile\s*No:\s*([^\n]+)/i);
-    return m ? m[1].trim() : '';
-  })();
+  const name = (()=> { const m = recvBlock.match(/Name:\s*([^\n]+)/i); return m ? m[1].trim() : ''; })();
+  const email = (()=> { const m = recvBlock.match(/E-?mail:\s*([^\n]+)/i); return m ? m[1].trim() : ''; })();
+  const mobile = (()=> { const m = recvBlock.match(/Mobile\s*No:\s*([^\n]+)/i); return m ? m[1].trim() : ''; })();
   const address = (()=> {
-    // Between Address: and next known label (E-mail or Mobile)
     const m = recvBlock.match(/Address:\s*([\s\S]*?)(?:E-?mail:|Mobile\s*No:|$)/i);
     return m ? m[1].replace(/\n+/g,' ').trim() : '';
   })();
 
-  // Table rows block between header and "Sub Total"
+  // Table rows
   const rowsBlock = (() => {
-    const start = T.search(/Service Description/i);
+    const start = T.search(/Service\s*Description/i);
     const end = T.search(/Sub\s*Total/i);
     return (start>=0 && end>start) ? T.slice(start, end) : '';
   })();
 
-  // Extract service rows: pattern "1 ... amount"
   const services = [];
   if(rowsBlock){
     const lines = rowsBlock.split('\n').map(s=>s.trim()).filter(Boolean);
-    // Skip header lines
     const filtered = lines.filter(l => !/^S\.\s*No\.?$/i.test(l) && !/^Service\s*Description$/i.test(l) && !/^Amount/i.test(l));
-    // Heuristic: accumulate text until we see a line that ends with a number
     let cur = '';
     for(const l of filtered){
       cur = cur ? (cur + ' ' + l) : l;
@@ -666,8 +719,8 @@ function parseInvoiceText(txt){
   }
 
   // Totals
-  const subTotalNum = pickMoneyAfter('Sub\\s*Total');
-  const discountNum = pickMoneyAfter('Less:\\s*Discount');
+  const subTotalNum   = pickMoneyAfter('Sub\\s*Total');
+  const discountNum   = pickMoneyAfter('Less:\\s*Discount');
   const invoiceAmtNum = pickMoneyAfter('Invoice\\s*Amount');
 
   return {
@@ -695,11 +748,7 @@ function applyParsedToForm(p){
     p.services.forEach(s => addServiceRow(s.desc || '', String(s.amt || '')));
   }
 
-  // If discount present, set it; totals will recompute
   if(Number.isFinite(p.discount)) $('#discountInput').value = p.discount;
-
-  // If a reliable grand total was parsed, we keep it as reference; actual totals are computed from rows + discount
-  // If rows missing, but we have subTotal/grandTotal, we still recompute totals from discount field.
 }
 
 // ===== END: Edit Invoice =====
