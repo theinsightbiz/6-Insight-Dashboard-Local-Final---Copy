@@ -8,18 +8,34 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+
   <!-- html2canvas + jsPDF for client-side PDF export -->
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
   <!-- PDF.js for reading uploaded invoice PDFs (Edit Invoice) -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.js"></script>
+  <!-- IMPORTANT: point pdf.js to its worker -->
+  <script>
+    // Set worker src as soon as pdf.js is available
+    (function waitForPdfjs(){
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js";
+      } else {
+        setTimeout(waitForPdfjs, 50);
+      }
+    })();
+  </script>
+
+  <!-- Tesseract.js for OCR fallback on image-only PDFs -->
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
 </head>
 <body>
   <div class="container">
     <header>
       <div class="title">
         <img src="logo.png" alt="Firm Logo" class="logo" />
-        <span class="pill">Tasks • Deadlines • Billing</span>
+        <span class="pill">Tasks • Deadlines • Billings</span>
       </div>
       <div class="actions">
         <button class="btn icon primary" id="addTaskBtn" aria-haspopup="dialog">➕ Add Task</button>
@@ -133,75 +149,24 @@
     <footer class="note">Insight at work: organize, analyze, achieve.</footer>
   </div>
 
-  <!-- Modal: Add/Edit Task (existing) -->
+  <!-- Modal: Add/Edit Task -->
   <div class="modal" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
     <div class="dialog">
-      <header>
-        <h2 id="taskModalTitle">New Task</h2>
-      </header>
+      <header><h2 id="taskModalTitle">New Task</h2></header>
       <form id="taskForm">
         <div class="body">
           <div class="dialog grid2">
-            <div>
-              <label>Client Name</label>
-              <input required id="fClient" placeholder="Client / Entity" />
-            </div>
-            <div>
-              <label>Task Title</label>
-              <input required id="fTitle" placeholder="e.g., GSTR-1 Filing" />
-            </div>
-            <div>
-              <label>Priority</label>
-              <select id="fPriority" required>
-                <option>High</option>
-                <option selected>Medium</option>
-                <option>Low</option>
-              </select>
-            </div>
-            <div>
-              <label>In-Charge</label>
-              <input required id="fAssignee" placeholder="Team member" />
-            </div>
-            <div>
-              <label>Status</label>
-              <select id="fStatus" required>
-                <option>Not Started</option>
-                <option selected>In Progress</option>
-                <option>Waiting Client</option>
-                <option>On Hold</option>
-                <option>Completed</option>
-              </select>
-            </div>
-            <div>
-              <label>Deadline</label>
-              <input type="date" id="fDeadline" required />
-            </div>
-            <div>
-              <label>Fee (₹)</label>
-              <input type="number" step="0.01" min="0" id="fFee" required />
-            </div>
-            <div>
-              <label>Received (₹)</label>
-              <input type="number" step="0.01" min="0" id="fAdvance" value="0" />
-            </div>
-            <div>
-              <label>Invoice Status</label>
-              <select id="fInvoiceStatus">
-                <option value="">Select status…</option>
-                <option>Not Raised</option>
-                <option>Sent</option>
-                <option>Paid</option>
-                <option>Partially Paid</option>
-              </select>
-            </div>
-            <div>
-              <label>Notes / Description</label>
-              <textarea id="fNotes" placeholder="Brief details, documents pending, etc."></textarea>
-            </div>
-            <div>
-              <label><input type="checkbox" id="fRecurring" /> Recurring monthly</label>
-              <small class="hint">If checked, this becomes a template. The app will auto-create monthly instances on the same day as the deadline.</small>
-            </div>
+            <div><label>Client Name</label><input required id="fClient" placeholder="Client / Entity" /></div>
+            <div><label>Task Title</label><input required id="fTitle" placeholder="e.g., GSTR-1 Filing" /></div>
+            <div><label>Priority</label><select id="fPriority" required><option>High</option><option selected>Medium</option><option>Low</option></select></div>
+            <div><label>In-Charge</label><input required id="fAssignee" placeholder="Team member" /></div>
+            <div><label>Status</label><select id="fStatus" required><option>Not Started</option><option selected>In Progress</option><option>Waiting Client</option><option>On Hold</option><option>Completed</option></select></div>
+            <div><label>Deadline</label><input type="date" id="fDeadline" required /></div>
+            <div><label>Fee (₹)</label><input type="number" step="0.01" min="0" id="fFee" required /></div>
+            <div><label>Received (₹)</label><input type="number" step="0.01" min="0" id="fAdvance" value="0" /></div>
+            <div><label>Invoice Status</label><select id="fInvoiceStatus"><option value="">Select status…</option><option>Not Raised</option><option>Sent</option><option>Paid</option><option>Partially Paid</option></select></div>
+            <div><label>Notes / Description</label><textarea id="fNotes" placeholder="Brief details, documents pending, etc."></textarea></div>
+            <div><label><input type="checkbox" id="fRecurring" /> Recurring monthly</label><small class="hint">If checked, this becomes a template. The app will auto-create monthly instances on the same day as the deadline.</small></div>
           </div>
         </div>
         <footer>
@@ -215,36 +180,16 @@
   <!-- Modal: Create Invoice -->
   <div class="modal" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle">
     <div class="dialog">
-      <header>
-        <h2 id="invoiceModalTitle">Create Invoice</h2>
-      </header>
+      <header><h2 id="invoiceModalTitle">Create Invoice</h2></header>
       <form id="invoiceForm">
         <div class="body">
           <div class="dialog grid2">
-            <div>
-              <label>Invoice No.</label>
-              <input id="invNumber" required />
-            </div>
-            <div>
-              <label>Invoice Date</label>
-              <input type="date" id="invDate" required />
-            </div>
-            <div>
-              <label>Client Name</label>
-              <input id="invClient" required placeholder="Billed to / Receiver" />
-            </div>
-            <div>
-              <label>Mobile No.</label>
-              <input id="invMobile" placeholder="+91…" />
-            </div>
-            <div>
-              <label>Email</label>
-              <input id="invEmail" type="email" placeholder="client@example.com" />
-            </div>
-            <div>
-              <label>Address</label>
-              <textarea id="invAddress" placeholder="Street, City, State, PIN"></textarea>
-            </div>
+            <div><label>Invoice No.</label><input id="invNumber" required /></div>
+            <div><label>Invoice Date</label><input type="date" id="invDate" required /></div>
+            <div><label>Client Name</label><input id="invClient" required placeholder="Billed to / Receiver" /></div>
+            <div><label>Mobile No.</label><input id="invMobile" placeholder="+91…" /></div>
+            <div><label>Email</label><input id="invEmail" type="email" placeholder="client@example.com" /></div>
+            <div><label>Address</label><textarea id="invAddress" placeholder="Street, City, State, PIN"></textarea></div>
           </div>
 
           <div class="inv-services">
@@ -261,10 +206,7 @@
             <div id="serviceRows"></div>
             <div class="inv-totals">
               <div class="tot-row"><span>Sub Total</span><span class="money">₹ <span id="subTotal">0</span></span></div>
-              <div class="tot-row">
-                <label for="discountInput">Less: Discount</label>
-                <input id="discountInput" type="number" min="0" step="0.01" value="0">
-              </div>
+              <div class="tot-row"><label for="discountInput">Less: Discount</label><input id="discountInput" type="number" min="0" step="0.01" value="0"></div>
               <div class="tot-row strong"><span>Invoice Amount</span><span class="money">₹ <span id="grandTotal">0</span></span></div>
               <div class="tot-row words"><small>Amount (in words): <span id="amountWords">Zero Rupees only</span></small></div>
             </div>
@@ -282,9 +224,7 @@
   <!-- Modal: Edit Invoice (Upload PDF) -->
   <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
     <div class="dialog">
-      <header>
-        <h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2>
-      </header>
+      <header><h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2></header>
       <div class="body">
         <div class="edit-grid">
           <div class="uploader" id="pdfDrop">
@@ -295,9 +235,7 @@
           <div class="parse-log" id="parseLog" aria-live="polite"></div>
         </div>
       </div>
-      <footer>
-        <button type="button" class="btn ghost" id="editCancelBtn">Close</button>
-      </footer>
+      <footer><button type="button" class="btn ghost" id="editCancelBtn">Close</button></footer>
     </div>
   </div>
 
