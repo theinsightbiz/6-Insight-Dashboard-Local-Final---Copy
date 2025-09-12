@@ -13,7 +13,7 @@
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,var(--bg), #20262b 30%, #1b2126 100%);color:var(--text)}
+body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,var(--bg), #20262b 30%, #1d2328 100%);color:var(--text)}
 .container{max-width:1600px;margin:0 auto;padding:16px}
 header{display:flex;gap:18px;align-items:center;justify-content:space-between;margin-bottom:12px}
 .title{font-size:0;display:flex;gap:12px;align-items:center}
@@ -117,6 +117,7 @@ footer.note{margin:16px 0;color:var(--muted);font-size:16px}
 /* ===== INVOICE UI (modal form) ===== */
 .inv-services{margin-top:8px;border-top:1px dashed var(--line);padding-top:10px}
 .inv-services-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.inv-services-head .row-actions{display:flex;gap:8px;align-items:center}
 .inv-grid-head{display:grid;grid-template-columns:40px 1fr 180px 60px;gap:8px;font-size:12px;color:var(--muted);margin:6px 0}
 .inv-row{display:grid;grid-template-columns:40px 1fr 180px 60px;gap:8px;align-items:center;margin:4px 0}
 .inv-row input[type="text"]{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--field);color:var(--text)}
@@ -126,6 +127,13 @@ footer.note{margin:16px 0;color:var(--muted);font-size:16px}
 .tot-row{display:flex;justify-content:space-between;align-items:center;margin:4px 0}
 .tot-row.strong{font-weight:700}
 .tot-row.words{color:var(--muted)}
+
+/* ===== Edit Invoice modal ===== */
+.edit-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.uploader{border:1px dashed var(--line);border-radius:12px;background:rgba(120,176,228,.06);padding:18px;text-align:center;cursor:pointer}
+.uploader:hover{background:rgba(120,176,228,.1)}
+.uploader input[type="file"]{display:block;margin:6px auto}
+.parse-log{border:1px solid var(--line);border-radius:12px;background:#273038;padding:12px;min-height:56px;font-size:12px;color:var(--muted)}
 
 /* ===== Printable A4 Invoice ===== */
 #invoiceA4{position:fixed;left:-9999px;top:-9999px;visibility:hidden}
@@ -147,7 +155,7 @@ footer.note{margin:16px 0;color:var(--muted);font-size:16px}
 .inv-billto{border:1px solid #ddd;border-radius:10px;padding:10px;margin-bottom:10px}
 .box-title{font-size:11px;color:#333;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .bt-grid{display:grid;grid-template-columns:2fr 1fr;gap:6px;align-items:start}
-/* (1) align "Invoice Amount" label right with the numeric amount */
+/* Align "Invoice Amount" label right with the numeric amount */
 .bt-grid > div:nth-child(2){ text-align:right; padding-right:4px; }
 
 .money.big{font-size:18px;font-weight:800}
@@ -162,10 +170,7 @@ footer.note{margin:16px 0;color:var(--muted);font-size:16px}
 .bank-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px}
 .inv-terms{border:1px solid #ddd;border-radius:10px;padding:10px}
 .inv-terms ol{margin:6px 0 0 18px;padding:0;font-size:12px}
-/* (3) hide in-box note and show an external note below the box */
-.inv-terms .note{display:none}
 .inv-note{margin:6px 0 0 0;font-size:11px;color:#333}
-/* signature */
 .inv-sign{display:flex;flex-direction:column;align-items:flex-end;margin-top:24px}
 .inv-sign .sign-name{font-weight:700}
 .inv-sign .sign-title{font-size:12px;color:#333}
