@@ -8,9 +8,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- jsPDF + html2canvas for client-side PDF export -->
+  <!-- html2canvas + jsPDF for client-side PDF export -->
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <!-- PDF.js for reading uploaded invoice PDFs (Edit Invoice) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -131,7 +133,7 @@
     <footer class="note">Insight at work: organize, analyze, achieve.</footer>
   </div>
 
-  <!-- Modal: Add/Edit Task (unchanged) -->
+  <!-- Modal: Add/Edit Task (existing) -->
   <div class="modal" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
     <div class="dialog">
       <header>
@@ -248,7 +250,10 @@
           <div class="inv-services">
             <div class="inv-services-head">
               <h3>Service Lines</h3>
-              <button type="button" class="btn" id="addServiceRowBtn">➕ Add Row</button>
+              <div class="row-actions">
+                <button type="button" class="btn" id="addServiceRowBtn">➕ Add Row</button>
+                <button type="button" class="btn ghost" id="openEditInvoiceBtn" title="Upload an existing invoice PDF to edit">🖊️ Edit from PDF</button>
+              </div>
             </div>
             <div class="inv-grid-head">
               <span>#</span><span>Description of Service</span><span class="money">Amount (₹)</span><span>—</span>
@@ -271,6 +276,28 @@
           <button type="button" class="btn primary" id="downloadPdfBtn">Download PDF</button>
         </footer>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Invoice (Upload PDF) -->
+  <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
+    <div class="dialog">
+      <header>
+        <h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2>
+      </header>
+      <div class="body">
+        <div class="edit-grid">
+          <div class="uploader" id="pdfDrop">
+            <input type="file" id="pdfInput" accept="application/pdf" />
+            <p><strong>Drop your invoice PDF here</strong> or click to select.</p>
+            <small>Tip: Use an invoice previously downloaded from this app for best results.</small>
+          </div>
+          <div class="parse-log" id="parseLog" aria-live="polite"></div>
+        </div>
+      </div>
+      <footer>
+        <button type="button" class="btn ghost" id="editCancelBtn">Close</button>
+      </footer>
     </div>
   </div>
 
@@ -341,8 +368,8 @@
           <li>May deduct TDS @ 10% as per IT Act u/s 194J.</li>
           <li>E &amp; O Expected.</li>
         </ol>
-        <div class="note">Note: This is a computer generated invoice and hence does not require a signature.</div>
       </div>
+      <div class="inv-note">Note: This is a computer generated invoice and hence does not require a signature.</div>
 
       <div class="inv-sign">
         <div class="sign-name">Priyam Adarsh</div>
