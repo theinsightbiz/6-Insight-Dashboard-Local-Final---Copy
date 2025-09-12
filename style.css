@@ -1,0 +1,181 @@
+:root{
+  --brand:#78b0e4;
+  --bg:#272f35;
+  --text:#f4f5f6;
+  --muted:#c9d0d5;
+  --panel:#2b343a;
+  --chip:#303a41;
+  --chip-br:#3a4349;
+  --line:#3a4349;
+  --field:#313b42;
+  --shadow: 0 10px 30px rgba(0,0,0,.45), 0 6px 16px rgba(20,40,100,.2);
+  --radius:16px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,var(--bg), #20262b 30%, #1b2126 100%);color:var(--text)}
+.container{max-width:1600px;margin:0 auto;padding:16px}
+header{display:flex;gap:18px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.title{font-size:0;display:flex;gap:12px;align-items:center}
+.title .logo{height:40px;width:auto;display:block}
+.title .pill{font-size:12px;padding:6px 10px;border:1px solid var(--chip-br);background:var(--chip);border-radius:999px;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+
+button,select,input{font:inherit}
+.btn{border:1px solid var(--line);background:#2a333a;color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;box-shadow:var(--shadow);transition:transform .06s, background .18s, color .18s, border-color .18s}
+.btn:hover,.btn:focus-visible{transform:translateY(-1px);background:var(--brand)!important;color:#fff!important;border-color:var(--brand)!important}
+.btn.primary{background:#33404a}
+.btn.ghost{background:transparent}
+.btn.icon{display:flex;gap:8px;align-items:center}
+#statusMultiBtn{ width:100%; }
+
+/* Tabs */
+.tabs{display:flex;gap:8px;align-items:center;margin:8px 0 12px}
+.tab{border:1px solid var(--line);background:transparent;color:var(--text);padding:8px 14px;border-radius:999px;cursor:pointer;transition:background .18s,color .18s,border-color .18s,transform .06s}
+.tab:hover,.tab:focus-visible{background:var(--brand);color:#fff;border-color:var(--brand);transform:translateY(-1px)}
+.tab.active{background:var(--brand);color:#272f35;border-color:var(--brand)}
+
+/* Multi-select dropdown (Status) */
+.multi { position: relative; display: inline-block; }
+.multi .menu{
+  position: absolute; top: 110%; left: 0; z-index: 50;
+  min-width: 220px; padding: 10px; border:1px solid var(--line);
+  border-radius: 12px; background: var(--panel); box-shadow: var(--shadow);
+}
+.multi .menu label{
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 4px; cursor: pointer; user-select: none; color: var(--text);
+}
+.multi .menu label:hover{ background: rgba(120,176,228,.08); border-radius: 8px; }
+.multi .menu input[type="checkbox"]{ accent-color: var(--brand); }
+.multi .menu .menu-actions{
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px;
+}
+
+/* Controls */
+.controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .8fr .7fr auto;gap:10px;margin:12px 0}
+.input, .select{width:100%;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text);padding:8px 10px;outline:none}
+.input:focus, .select:focus{box-shadow:0 0 0 3px rgba(120,176,228,.3)}
+
+/* KPI cards */
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:12px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);color:var(--text);transition:background .18s ease, color .18s ease, transform .06s ease}
+.card h3{margin:0 0 6px 0;font-weight:600;font-size:12px;color:var(--muted)}
+.card .val{font-size:20px;font-weight:800;color:var(--text)}
+.card:hover,.card:focus-visible{background:var(--brand)!important;color:#fff!important;transform:translateY(-1px)}
+.card:hover h3,.card:focus-visible h3{color:#fff!important}
+.card:hover .val,.card:focus-visible .val{color:#fff!important}
+
+/* Table */
+.table{width:100%;border-collapse:separate;border-spacing:0 8px;table-layout:fixed}
+.thead th{font-size:12px;color:var(--muted);font-weight:600;text-align:center;padding:0 8px;white-space:nowrap}
+.col-check{width:30px}
+.col-task{width:16%}
+.col-money{width:110px}
+/* widen specific columns */
+.table .thead th:nth-child(2), .table .row  td:nth-child(2){ width:180px; }
+.table .thead th:nth-child(3), .table .row  td:nth-child(3){ width:19%; }
+.table .thead th:nth-child(6), .table .row  td:nth-child(6){ width:160px; }
+.table .thead th:nth-child(7), .table .row  td:nth-child(7){ width:105px; }
+.table .thead th:nth-child(11), .table .row  td:nth-child(11){ width:150px; }
+.table .thead th:nth-child(12), .table .row  td:nth-child(12){ width:70px; }
+.row{background:#2d3640;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.row td{padding:10px 8px;border-left:1px solid var(--line);white-space:normal;overflow:visible;text-overflow:clip;text-align:center;vertical-align:middle;color:var(--text)}
+.row td:first-child{border-left:none;border-radius:12px 0 0 12px}
+.row td:last-child{border-radius:0 12px 12px 0}
+.money{font-variant-numeric:tabular-nums;text-align:right}
+.overdue{color:#ffb4b4}
+.badge{padding:6px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--text)}
+.badge.recurring{border-style:dashed;opacity:.9}
+.priority.high{color:#ffd1d1;background:rgba(239,68,68,.12);border-color:#5b1f24}
+.priority.medium{color:#ffe9c7;background:rgba(245,158,11,.12);border-color:#5b3f1f}
+.priority.low{color:#c7ffdb;background:rgba(16,185,129,.12);border-color:#1f5b45}
+.status{padding:6px 10px;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text)}
+#statusMulti{ width:100%; }
+
+/* Row hover */
+.table .row:hover{background:var(--brand)!important}
+.table .row:hover td{color:#fff!important}
+.table .row:hover .badge{background:transparent!important;border-color:#fff!important;color:#fff!important}
+.table .row:hover .status{background:transparent!important;border-color:#fff!important;color:#fff!important}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(3,6,20,.6);display:none;align-items:center;justify-content:center;padding:20px}
+.modal.active{display:flex}
+.dialog{width:min(900px,98vw);background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+.dialog header{padding:12px 16px;border-bottom:1px solid var(--line)}
+.dialog h2{margin:0;font-size:18px}
+.dialog .body{padding:12px}
+.dialog .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dialog label{font-size:12px;color:var(--muted);display:block;margin:6px 2px}
+.dialog input, .dialog select, .dialog textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:var(--field);color:var(--text);padding:8px 10px;outline:none}
+.dialog textarea{min-height:80px;resize:vertical}
+.dialog footer{display:flex;justify-content:flex-end;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.hint{display:block;color:var(--muted);font-size:11px;margin-top:4px}
+footer.note{margin:16px 0;color:var(--muted);font-size:16px}
+
+/* ===== INVOICE UI (modal form) ===== */
+.inv-services{margin-top:8px;border-top:1px dashed var(--line);padding-top:10px}
+.inv-services-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.inv-grid-head{display:grid;grid-template-columns:40px 1fr 180px 60px;gap:8px;font-size:12px;color:var(--muted);margin:6px 0}
+.inv-row{display:grid;grid-template-columns:40px 1fr 180px 60px;gap:8px;align-items:center;margin:4px 0}
+.inv-row input[type="text"]{padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--field);color:var(--text)}
+.inv-row input[type="number"]{text-align:right}
+.inv-row .remove{border-color:#5b1f24}
+.inv-totals{margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
+.tot-row{display:flex;justify-content:space-between;align-items:center;margin:4px 0}
+.tot-row.strong{font-weight:700}
+.tot-row.words{color:var(--muted)}
+
+/* ===== Printable A4 Invoice ===== */
+#invoiceA4{position:fixed;left:-9999px;top:-9999px;visibility:hidden}
+.a4{
+  width:210mm;min-height:297mm;background:#fff;color:#111;
+  font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  padding:18mm 14mm;box-sizing:border-box;
+  image-rendering:-webkit-optimize-contrast;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+}
+.page{box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+.inv-letterhead{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:10px}
+.inv-letterhead img{height:42px;width:auto}
+.lh-left{display:flex;gap:10px;align-items:flex-start}
+.firm-name{font-weight:800;font-size:18px}
+.firm-sub{font-size:11px;color:#444}
+.tax-invoice{font-weight:800;font-size:20px;text-align:right}
+.inv-meta{font-size:12px;margin-top:6px}
+.inv-billto{border:1px solid #ddd;border-radius:10px;padding:10px;margin-bottom:10px}
+.box-title{font-size:11px;color:#333;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.bt-grid{display:grid;grid-template-columns:2fr 1fr;gap:6px;align-items:start}
+/* (1) align "Invoice Amount" label right with the numeric amount */
+.bt-grid > div:nth-child(2){ text-align:right; padding-right:4px; }
+
+.money.big{font-size:18px;font-weight:800}
+.inv-table{width:100%;border-collapse:collapse;margin:10px 0}
+.inv-table th,.inv-table td{border:1px solid #ddd;padding:8px;font-size:12px}
+.inv-table thead th{background:#f3f6fb}
+.inv-table tfoot th{background:#fafafa}
+.inv-table .right{text-align:right}
+.inv-table .money{text-align:right}
+.inv-table tfoot tr.total th{font-size:13px}
+.inv-banking{border:1px solid #ddd;border-radius:10px;padding:10px;margin:10px 0}
+.bank-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px}
+.inv-terms{border:1px solid #ddd;border-radius:10px;padding:10px}
+.inv-terms ol{margin:6px 0 0 18px;padding:0;font-size:12px}
+/* (3) hide in-box note and show an external note below the box */
+.inv-terms .note{display:none}
+.inv-note{margin:6px 0 0 0;font-size:11px;color:#333}
+/* signature */
+.inv-sign{display:flex;flex-direction:column;align-items:flex-end;margin-top:24px}
+.inv-sign .sign-name{font-weight:700}
+.inv-sign .sign-title{font-size:12px;color:#333}
+
+/* Dark UI form select background fix */
+:root { color-scheme: dark; }
+select option, select optgroup, .status option { background: var(--field); color: var(--text); }
+
+/* Print */
+@media print{
+  body{background:#fff}
+  .a4{box-shadow:none}
+}
