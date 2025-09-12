@@ -9,26 +9,26 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
-  <!-- Export libs -->
+  <!-- html2canvas + jsPDF for client-side PDF export -->
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
-  <!-- PDF.js for reading uploaded invoice PDFs -->
+  <!-- PDF.js for reading uploaded invoice PDFs (Edit Invoice) -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.js"></script>
+  <!-- IMPORTANT: point pdf.js to its worker -->
   <script>
-    // Ensure the PDF worker is set even under slow networks:
-    (function ensurePdfWorker(){
-      function setWorker(){
-        if (window.pdfjsLib && (!pdfjsLib.GlobalWorkerOptions.workerSrc || !/pdf\.worker/.test(pdfjsLib.GlobalWorkerOptions.workerSrc))) {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js";
-        }
+    // Set worker src as soon as pdf.js is available
+    (function waitForPdfjs(){
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js";
+      } else {
+        setTimeout(waitForPdfjs, 50);
       }
-      document.addEventListener('DOMContentLoaded', setWorker);
-      window.addEventListener('load', setWorker);
-      setWorker();
     })();
   </script>
-  <!-- Tesseract is now lazy-loaded in script.js only when needed -->
+
+  <!-- Tesseract.js for OCR fallback on image-only PDFs -->
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -46,13 +46,15 @@
       </div>
     </header>
 
-    <!-- Filters -->
+    <!-- Filters / Controls -->
     <div class="controls" role="region" aria-label="Filters">
       <div class="field"><input class="input" id="searchInput" placeholder="Search client, task, assignee…" aria-label="Search" /></div>
       <div class="field">
         <select class="select" id="priorityFilter" aria-label="Priority filter">
           <option value="">Priority: All</option>
-          <option>High</option><option>Medium</option><option>Low</option>
+          <option>High</option>
+          <option>Medium</option>
+          <option>Low</option>
         </select>
       </div>
       <div class="field">
@@ -72,10 +74,18 @@
           </div>
         </div>
       </div>
-      <div class="field"><select class="select" id="assigneeFilter"><option value="">In-Charge: All</option></select></div>
-      <div class="field"><select class="select" id="monthFilter"><option value="">Month: All</option></select></div>
       <div class="field">
-        <select class="select" id="sortBy">
+        <select class="select" id="assigneeFilter" aria-label="Assignee filter">
+          <option value="">In-Charge: All</option>
+        </select>
+      </div>
+      <div class="field">
+        <select class="select" id="monthFilter" aria-label="Month filter">
+          <option value="">Month: All</option>
+        </select>
+      </div>
+      <div class="field">
+        <select class="select" id="sortBy" aria-label="Sort by">
           <option value="deadline">Sort: Deadline</option>
           <option value="createdAt">Sort: Created</option>
           <option value="priority">Sort: Priority</option>
@@ -83,10 +93,15 @@
           <option value="fee">Sort: Fee</option>
         </select>
       </div>
-      <div class="field"><select class="select" id="sortDir"><option value="asc">Asc</option><option value="desc">Desc</option></select></div>
+      <div class="field">
+        <select class="select" id="sortDir" aria-label="Sort direction">
+          <option value="asc">Asc</option>
+          <option value="desc">Desc</option>
+        </select>
+      </div>
     </div>
 
-    <!-- KPI -->
+    <!-- Summary Cards -->
     <section class="grid" aria-label="Summary">
       <div class="card"><h3>Total Tasks</h3><div class="val" id="kpiTotal">0</div></div>
       <div class="card"><h3>Pending</h3><div class="val" id="kpiPending">0</div></div>
@@ -98,12 +113,34 @@
 
     <!-- Table -->
     <table class="table" aria-label="Tasks table">
+      <colgroup>
+        <col class="col-check">
+        <col class="col-client">
+        <col class="col-task">
+        <col class="col-pri">
+        <col class="col-assignee">
+        <col class="col-status">
+        <col class="col-deadline">
+        <col class="col-money">
+        <col class="col-money">
+        <col class="col-money">
+        <col class="col-invoice">
+        <col class="col-actions">
+      </colgroup>
       <thead class="thead">
         <tr>
           <th><input type="checkbox" id="selectAll"></th>
-          <th>Client</th><th>Task</th><th>Priority</th><th>In-Charge</th>
-          <th>Status</th><th>Deadline</th><th>Fee</th><th>Received</th><th>Outstanding</th>
-          <th>Invoice Status</th><th>Actions</th>
+          <th>Client</th>
+          <th>Task</th>
+          <th>Priority</th>
+          <th>In-Charge</th>
+          <th>Status</th>
+          <th>Deadline</th>
+          <th>Fee</th>
+          <th>Received</th>
+          <th>Outstanding</th>
+          <th>Invoice Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="taskTbody"></tbody>
@@ -119,20 +156,23 @@
       <form id="taskForm">
         <div class="body">
           <div class="dialog grid2">
-            <div><label>Client Name</label><input required id="fClient"/></div>
-            <div><label>Task Title</label><input required id="fTitle"/></div>
+            <div><label>Client Name</label><input required id="fClient" placeholder="Client / Entity" /></div>
+            <div><label>Task Title</label><input required id="fTitle" placeholder="e.g., GSTR-1 Filing" /></div>
             <div><label>Priority</label><select id="fPriority" required><option>High</option><option selected>Medium</option><option>Low</option></select></div>
-            <div><label>In-Charge</label><input required id="fAssignee"/></div>
+            <div><label>In-Charge</label><input required id="fAssignee" placeholder="Team member" /></div>
             <div><label>Status</label><select id="fStatus" required><option>Not Started</option><option selected>In Progress</option><option>Waiting Client</option><option>On Hold</option><option>Completed</option></select></div>
-            <div><label>Deadline</label><input type="date" id="fDeadline" required/></div>
-            <div><label>Fee (₹)</label><input type="number" step="0.01" min="0" id="fFee" required/></div>
-            <div><label>Received (₹)</label><input type="number" step="0.01" min="0" id="fAdvance" value="0"/></div>
+            <div><label>Deadline</label><input type="date" id="fDeadline" required /></div>
+            <div><label>Fee (₹)</label><input type="number" step="0.01" min="0" id="fFee" required /></div>
+            <div><label>Received (₹)</label><input type="number" step="0.01" min="0" id="fAdvance" value="0" /></div>
             <div><label>Invoice Status</label><select id="fInvoiceStatus"><option value="">Select status…</option><option>Not Raised</option><option>Sent</option><option>Paid</option><option>Partially Paid</option></select></div>
-            <div><label>Notes / Description</label><textarea id="fNotes"></textarea></div>
-            <div><label><input type="checkbox" id="fRecurring"/> Recurring monthly</label><small class="hint">Auto-creates monthly instances on the same day.</small></div>
+            <div><label>Notes / Description</label><textarea id="fNotes" placeholder="Brief details, documents pending, etc."></textarea></div>
+            <div><label><input type="checkbox" id="fRecurring" /> Recurring monthly</label><small class="hint">If checked, this becomes a template. The app will auto-create monthly instances on the same day as the deadline.</small></div>
           </div>
         </div>
-        <footer><button type="button" class="btn ghost" id="cancelBtn">Cancel</button><button class="btn primary" type="submit" id="saveBtn">Save Task</button></footer>
+        <footer>
+          <button type="button" class="btn ghost" id="cancelBtn">Cancel</button>
+          <button class="btn primary" type="submit" id="saveBtn">Save Task</button>
+        </footer>
       </form>
     </div>
   </div>
@@ -144,22 +184,25 @@
       <form id="invoiceForm">
         <div class="body">
           <div class="dialog grid2">
-            <div><label>Invoice No.</label><input id="invNumber" required/></div>
-            <div><label>Invoice Date</label><input type="date" id="invDate" required/></div>
-            <div><label>Client Name</label><input id="invClient" required/></div>
-            <div><label>Mobile No.</label><input id="invMobile"/></div>
-            <div><label>Email</label><input id="invEmail" type="email"/></div>
-            <div><label>Address</label><textarea id="invAddress"></textarea></div>
+            <div><label>Invoice No.</label><input id="invNumber" required /></div>
+            <div><label>Invoice Date</label><input type="date" id="invDate" required /></div>
+            <div><label>Client Name</label><input id="invClient" required placeholder="Billed to / Receiver" /></div>
+            <div><label>Mobile No.</label><input id="invMobile" placeholder="+91…" /></div>
+            <div><label>Email</label><input id="invEmail" type="email" placeholder="client@example.com" /></div>
+            <div><label>Address</label><textarea id="invAddress" placeholder="Street, City, State, PIN"></textarea></div>
           </div>
+
           <div class="inv-services">
             <div class="inv-services-head">
               <h3>Service Lines</h3>
               <div class="row-actions">
                 <button type="button" class="btn" id="addServiceRowBtn">➕ Add Row</button>
-                <button type="button" class="btn ghost" id="openEditInvoiceBtn" title="Upload an existing invoice to edit">🖊️ Edit from PDF/Image</button>
+                <button type="button" class="btn ghost" id="openEditInvoiceBtn" title="Upload an existing invoice PDF to edit">🖊️ Edit from PDF</button>
               </div>
             </div>
-            <div class="inv-grid-head"><span>#</span><span>Description of Service</span><span class="money">Amount (₹)</span><span>—</span></div>
+            <div class="inv-grid-head">
+              <span>#</span><span>Description of Service</span><span class="money">Amount (₹)</span><span>—</span>
+            </div>
             <div id="serviceRows"></div>
             <div class="inv-totals">
               <div class="tot-row"><span>Sub Total</span><span class="money">₹ <span id="subTotal">0</span></span></div>
@@ -178,16 +221,16 @@
     </div>
   </div>
 
-  <!-- Modal: Edit Invoice (Upload PDF/Image) -->
+  <!-- Modal: Edit Invoice (Upload PDF) -->
   <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
     <div class="dialog">
-      <header><h2 id="editInvoiceTitle">Edit Invoice – Upload</h2></header>
+      <header><h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2></header>
       <div class="body">
         <div class="edit-grid">
           <div class="uploader" id="pdfDrop">
-            <input type="file" id="pdfInput" accept="application/pdf,image/png,image/jpeg" />
-            <p><strong>Drop your invoice PDF / image here</strong> or click to select.</p>
-            <small>Tip: For fastest parsing, upload a PDF downloaded from this app.</small>
+            <input type="file" id="pdfInput" accept="application/pdf" />
+            <p><strong>Drop your invoice PDF here</strong> or click to select.</p>
+            <small>Tip: Use an invoice previously downloaded from this app for best results.</small>
           </div>
           <div class="parse-log" id="parseLog" aria-live="polite"></div>
         </div>
@@ -196,7 +239,7 @@
     </div>
   </div>
 
-  <!-- Hidden A4 Invoice Template -->
+  <!-- Hidden A4 Invoice Template (render target for PDF) -->
   <div id="invoiceA4" aria-hidden="true">
     <div class="a4 page">
       <div class="inv-letterhead">
