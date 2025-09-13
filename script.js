@@ -692,10 +692,8 @@ async function handlePdfFile(file){
 
 /* ============ Parser tailored to our invoice layout ============ */
 function parseInvoiceText(txt){
-  // Normalise whitespace (keep newlines as hard row breaks)
   const T = (txt||'').replace(/\r/g,'').replace(/[ \t]+\n/g,'\n');
 
-  // helpers
   function pick(re, src=T){ const m = src.match(re); return m ? (m[1]||'').trim() : ''; }
   function pickMoneyAfter(label){
     const re = new RegExp(`${label}[\\s\\S]*?(₹?\\s*${DIGITS.source})`,'i');
@@ -708,7 +706,7 @@ function parseInvoiceText(txt){
   const invNo = pick(/Invoice\s*No:\s*([^\n]+)/i);
   const invDateDD = pick(/Invoice\s*Date:\s*([0-9]{2}\/[0-9]{2}\/[0-9]{4})/i);
 
-  // Receiver block: between "Detail of Receiver" and table start
+  // Receiver block
   const recvBlock = (() => {
     const start = T.search(/Detail\s+of\s+Receiver/i);
     if (start < 0) return '';
@@ -716,74 +714,52 @@ function parseInvoiceText(txt){
     return end>start ? T.slice(start, end) : T.slice(start);
   })();
 
-  // Strict field extraction from receiver block
-  // 1) Name — stop before any currency '₹' or the phrase 'Invoice Amount'
-  let name = pick(/Name:\s*([^\n₹]+)/i, recvBlock).replace(/\bInvoice\s*Amount.*$/i,'').trim();
-  // Remove stray currency/number fragments at end
-  name = name.replace(/\s*₹.*$/,'').replace(/\s+\d[\d,]*(?:\.\d{1,2})?$/, '').trim();
+  // Client Name
+  let name = pick(/Name:\s*([^\n]+)/i, recvBlock)
+               .replace(/\bInvoice\s*Amount.*$/i,'')
+               .replace(/₹.*$/,'')
+               .replace(/\d[\d,]*(\.\d{1,2})?$/,'')
+               .trim();
 
-  // 2) Email — capture only a valid email; blank if none
+  // Email
   let emailRaw = pick(/E-?mail:\s*([^\n]+)/i, recvBlock);
   let email = '';
   const emailMatch = emailRaw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   if (emailMatch) email = emailMatch[0].trim();
 
-  // 3) Mobile — capture only phone-like value; blank if too few digits
+  // Mobile
   let mobileLine = pick(/Mobile\s*No:\s*([^\n]+)/i, recvBlock);
   let mobile = '';
-  if (mobileLine) {
-    // keep only digits, +, spaces, () and -
+  if (mobileLine){
     const cleaned = mobileLine.replace(/[^\d+()\-\s]/g,'').trim();
     const digitCount = (cleaned.match(/\d/g)||[]).length;
     mobile = (digitCount >= 7) ? cleaned : '';
   }
 
-  // 4) Address — between Address: and next Email/Mobile/end
+  // Address
   const address = (() => {
     const m = recvBlock.match(/Address:\s*([\s\S]*?)(?:E-?mail:|Mobile\s*No:|$)/i);
     return m ? m[1].replace(/\n+/g,' ').trim() : '';
   })();
 
-  // Table rows block
+  // Service Rows
   const rowsBlock = (() => {
     const start = T.search(/Service\s*Description/i);
     const end = T.search(/Sub\s*Total/i);
     return (start>=0 && end>start) ? T.slice(start, end) : '';
   })();
 
-  // Extract services robustly
   const services = [];
-  if (rowsBlock) {
-    // Normalise for regex line scanning
-    const R = rowsBlock.replace(/[ \t]+/g,' ').replace(/\r/g,'');
-    // Prefer "S. No.  <desc>  <amount>" line pattern
-    const rowRe = /(?:^|\n)\s*\d{1,3}\s+([^\n₹]+?)\s+(₹?\s*[\d,]+(?:\.\d{1,2})?)(?=\s*(?:\n|$))/g;
-    let m;
-    while ((m = rowRe.exec(R)) !== null) {
-      const desc = (m[1]||'').replace(/\b(Service\s*Description|Amount(?:\s*\(₹\))?)\b/ig,'').trim();
-      const amtStr = (m[2]||'').replace(/[₹\s,]/g,'').trim();
-      if (desc || amtStr) services.push({ desc, amt: Number(amtStr||0) });
-    }
-
-    // Fallback: rolling window (as before) but with header stripping and symbol cleanup
-    if (services.length === 0) {
-      const lines = R.split('\n').map(s=>s.trim()).filter(Boolean);
-      const filtered = lines.filter(l => !/^S\.\s*No\.?$/i.test(l) && !/^Service\s*Description$/i.test(l) && !/^Amount/i.test(l));
-      let cur = '';
-      for (const l of filtered) {
-        cur = cur ? (cur + ' ' + l) : l;
-        const amountMatch = cur.match(new RegExp(`(.*?)\\s+(₹?\\s*${DIGITS.source})$`));
-        if (amountMatch) {
-          let desc = (amountMatch[1]||'').trim();
-          desc = desc
-            .replace(/\b(Service\s*Description|Amount(?:\s*\(₹\))?|S\.\s*No\.?)\b/ig,'')
-            .replace(/\(\d+\)/g,'')
-            .replace(/\s*%+\s*$/,'')
-            .trim();
-          const amtStr = (amountMatch[2]||'').replace(/[₹\s,]/g,'').trim();
-          if (desc || amtStr) services.push({ desc, amt: Number(amtStr||0) });
-          cur = '';
-        }
+  if (rowsBlock){
+    const lines = rowsBlock.split('\n').map(l=>l.trim()).filter(Boolean);
+    for (const line of lines){
+      // Ignore headers
+      if (/^S\.\s*No/i.test(line) || /^Service\s*Description/i.test(line) || /^Amount/i.test(line)) continue;
+      const m = line.match(new RegExp(`^(\\d+)?\\s*([^₹\\d]+)\\s*(₹?\\s*${DIGITS.source})$`));
+      if (m){
+        const desc = (m[2]||'').replace(/\(\d+\)|%/g,'').trim();
+        const amtStr = (m[3]||'').replace(/[₹\s,]/g,'').trim();
+        services.push({ desc, amt: Number(amtStr||0) });
       }
     }
   }
@@ -792,6 +768,14 @@ function parseInvoiceText(txt){
   const subTotalNum   = pickMoneyAfter('Sub\\s*Total');
   const discountNum   = pickMoneyAfter('Less:\\s*Discount');
   const invoiceAmtNum = pickMoneyAfter('Invoice\\s*Amount');
+
+  // 🔍 Debug overlay injection
+  const debugInfo = document.getElementById("debugInfo");
+  if (debugInfo){
+    debugInfo.textContent =
+      "---- Receiver Block ----\n" + recvBlock.trim() +
+      "\n\n---- Services Block ----\n" + rowsBlock.trim();
+  }
 
   return {
     invNo,
