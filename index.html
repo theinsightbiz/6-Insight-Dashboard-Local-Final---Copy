@@ -242,21 +242,33 @@
 
   <!-- Modal: Edit Invoice (Upload PDF) -->
   <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
-    <div class="dialog">
-      <header><h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2></header>
-      <div class="body">
-        <div class="edit-grid">
-          <div class="uploader" id="pdfDrop">
-            <input type="file" id="pdfInput" accept="application/pdf" />
-            <p><strong>Drop your invoice PDF here</strong> or click to select.</p>
-            <small>Tip: Use an invoice previously downloaded from this app for best results.</small>
-          </div>
-          <div class="parse-log" id="parseLog" aria-live="polite"></div>
+  <div class="dialog">
+    <header>
+      <h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2>
+    </header>
+    <div class="body">
+      <div class="edit-grid">
+        <div class="uploader" id="pdfDrop">
+          <input type="file" id="pdfInput" accept="application/pdf" />
+          <p><strong>Drop your invoice PDF here</strong> or click to select.</p>
+          <small>Tip: Use an invoice previously downloaded from this app for best results.</small>
         </div>
+
+        <!-- ✅ Debug info section placed right after uploader -->
+        <div id="parseLog" class="parse-log" aria-live="polite"></div>
+        <details style="margin-top:8px;">
+          <summary>🔍 Debug Log</summary>
+          <pre id="debugInfo" style="background:#f9f9f9; padding:8px; border:1px solid #ddd; max-height:200px; overflow:auto;"></pre>
+        </details>
+        <!-- ✅ End Debug info -->
       </div>
-      <footer><button type="button" class="btn ghost" id="editCancelBtn">Close</button></footer>
     </div>
+    <footer>
+      <button type="button" class="btn ghost" id="editCancelBtn">Close</button>
+    </footer>
   </div>
+</div>
+
 
   <!-- Hidden A4 Invoice Template (render target for PDF) -->
   <div id="invoiceA4" aria-hidden="true">
