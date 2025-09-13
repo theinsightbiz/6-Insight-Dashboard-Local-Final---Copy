@@ -4,31 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CA Task & Billing Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
   <!-- html2canvas + jsPDF for client-side PDF export -->
-  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
+          onerror="window.__libErr = (window.__libErr||[]).concat('html2canvas load failed')"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"
+          onerror="window.__libErr = (window.__libErr||[]).concat('jsPDF load failed')"></script>
 
-  <!-- PDF.js for reading uploaded invoice PDFs (Edit Invoice) -->
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.js"></script>
-  <!-- IMPORTANT: point pdf.js to its worker -->
-  <script>
-    // Set worker src as soon as pdf.js is available
-    (function waitForPdfjs(){
-      if (window.pdfjsLib) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js";
-      } else {
-        setTimeout(waitForPdfjs, 50);
+  <!-- ✅ pdf.js (ESM) with dual-CDN fallback; exposes window.pdfjsLib and sets worker -->
+  <script type="module">
+    (async () => {
+      async function tryImport(from, ver="4.6.82") {
+        const base = `${from}/pdfjs-dist@${ver}/build`;
+        const pdf = await import(`${base}/pdf.min.mjs`);
+        // Expose globally for script.js
+        window.pdfjsLib = pdf;
+        // Worker must also be an ESM file
+        pdf.GlobalWorkerOptions.workerSrc = `${base}/pdf.worker.min.mjs`;
+        window.__pdfWorkerSet = true;
+      }
+      try {
+        await tryImport("https://unpkg.com");
+      } catch (e1) {
+        (window.__libErr = (window.__libErr||[])).push('pdf.js import failed (unpkg): ' + (e1 && e1.message));
+        try {
+          await tryImport("https://cdn.jsdelivr.net/npm");
+        } catch (e2) {
+          (window.__libErr = (window.__libErr||[])).push('pdf.js import failed (jsDelivr): ' + (e2 && e2.message));
+          window.__pdfWorkerSet = false;
+        }
       }
     })();
   </script>
 
   <!-- Tesseract.js for OCR fallback on image-only PDFs -->
-  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"
+          onerror="window.__libErr = (window.__libErr||[]).concat('tesseract.js load failed')"></script>
 </head>
 <body>
   <div class="container">
@@ -43,6 +55,7 @@
         <button class="btn icon ghost" id="bulkDeleteBtn" title="Delete selected">🗑️ Bulk Delete</button>
         <button class="btn icon ghost" id="exportCsvBtn">⬇️ Export CSV</button>
         <button class="btn icon ghost" id="resetDemoBtn" title="Loads demo data">🧪 Load Demo</button>
+        <button class="btn icon ghost" id="debugToggleBtn" title="Toggle debug logs">🐞 Debug</button>
       </div>
     </header>
 
@@ -211,6 +224,12 @@
               <div class="tot-row words"><small>Amount (in words): <span id="amountWords">Zero Rupees only</span></small></div>
             </div>
           </div>
+
+          <!-- DEBUG PANEL -->
+          <details id="debugPanel" style="margin-top:12px; border:1px solid var(--line); border-radius:10px; padding:8px;">
+            <summary><strong>Debug Log</strong> (library status & last operation)</summary>
+            <div id="debugInfo" style="font-size:12px; color:var(--muted); white-space:pre-wrap;"></div>
+          </details>
         </div>
         <footer>
           <button type="button" class="btn ghost" id="invoiceCancelBtn">Cancel</button>

@@ -1,29 +1,69 @@
-// ===== Utilities =====
+/* =========================
+   Global Debug Utilities
+   ========================= */
+(function initDebugFlag(){
+  const url = new URL(window.location.href);
+  const qd = url.searchParams.get('debug');
+  if (qd === '1') localStorage.setItem('__DEBUG', '1');
+  if (qd === '0') localStorage.removeItem('__DEBUG');
+})();
+const DEBUG = !!localStorage.getItem('__DEBUG');
+
+function nowTs(){ return new Date().toISOString().split('T')[1].replace('Z',''); }
+function dlog(...args){ if (DEBUG) console.log('[DBG]', nowTs(), ...args); }
+function el(id){ return document.getElementById(id); }
+
+function reportDebugInfo(extra=''){
+  const info = [];
+  info.push(`Time: ${new Date().toLocaleString()}`);
+  info.push(`UserAgent: ${navigator.userAgent}`);
+  info.push(`Location Protocol: ${location.protocol}`);
+  info.push(`CDN load errors: ${(window.__libErr||[]).join(' | ') || 'none'}`);
+  info.push(`pdfjsLib: ${!!window.pdfjsLib}`);
+  info.push(`pdf.js worker set: ${!!window.__pdfWorkerSet}`);
+  info.push(`Tesseract: ${!!window.Tesseract}`);
+  info.push(`html2canvas: ${!!window.html2canvas}`);
+  info.push(`jsPDF: ${!!window.jspdf}`);
+  if (extra) info.push(`\nLast Operation:\n${extra}`);
+  const target = el('debugInfo'); if (target) target.textContent = info.join('\n');
+}
+
+function formatStepLog(steps){
+  return steps.map(s => `${s.t} — ${s.msg}${s.code?` [${s.code}]`:''}`).join('\n');
+}
+
+function pushStep(steps, msg, code=''){
+  const entry = { t: nowTs(), msg, code };
+  steps.push(entry);
+  el('parseLog').innerHTML = steps.map(s => `${s.t} — ${s.msg}${s.code?` <code>${s.code}</code>`:''}`).join('<br>');
+  reportDebugInfo(formatStepLog(steps));
+}
+
+/* =========================
+   Existing Utilities
+   ========================= */
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-const $ = (sel, root=document) => root.querySelector(sel);
+const $  = (sel, root=document) => root.querySelector(sel);
 const fmtMoney = n => (Number(n||0)).toLocaleString('en-IN',{maximumFractionDigits:2});
 const todayStr = () => new Date().toISOString().slice(0,10);
-const yymm = (dstr) => (dstr||'').slice(0,7); // YYYY-MM
+const yymm = (dstr) => (dstr||'').slice(0,7);
 const DIGITS = /[\d,]+(?:\.\d{1,2})?/;
 
-// DD/MM/YYYY
 function fmtDateDDMMYYYY(iso){
   if(!iso) return '';
-  const [y,m,d] = iso.split('-');
-  return `${d}/${m}/${y}`;
+  const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`;
 }
-function parseDDMM(dateStr){ // 28/02/2025 -> 2025-02-28
+function parseDDMM(dateStr){
   const m = dateStr && dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if(!m) return '';
-  return `${m[3]}-${m[2]}-${m[1]}`;
+  if(!m) return ''; return `${m[3]}-${m[2]}-${m[1]}`;
 }
-
-// Date helpers
 function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
 function lastDayOfMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
 function makeDateYMD(y,m,day){ const max = lastDayOfMonth(y,m); const d = Math.min(day, max); return new Date(y, m, d).toISOString().slice(0,10); }
 
-// ===== Storage =====
+/* =========================
+   Data & Storage
+   ========================= */
 const KEY = 'ca-dashboard-tasks-v1';
 const SKIP_KEY = 'ca-dashboard-skip-v1';
 let tasks = [];
@@ -38,10 +78,12 @@ function isSkipped(recurringId, period){ return !!skips.find(s=>s.recurringId===
 function addSkip(recurringId, period){ if(recurringId && period && !isSkipped(recurringId, period)){ skips.push({recurringId, period}); saveSkips(); } }
 function removeSkipsForSeries(recurringId){ if(!recurringId) return; skips = skips.filter(s=>s.recurringId!==recurringId); saveSkips(); }
 
-// ===== Recurring generation =====
+/* =========================
+   Recurring generation
+   ========================= */
 function ensureRecurringInstances(){
   const now = new Date();
-  const horizon = 6; // months
+  const horizon = 6;
   const templates = tasks.filter(t=>t.recur && !t.period);
 
   for (const tpl of templates){
@@ -66,29 +108,17 @@ function ensureRecurringInstances(){
       const exists = tasks.some(t => t.period === period && t.recurringId === rid);
       if (!exists && !isSkipped(rid, period)){
         tasks.push({
-          id: crypto.randomUUID(),
-          createdAt: Date.now(),
-          client: tpl.client,
-          title: tpl.title,
-          priority: tpl.priority,
-          assignee: tpl.assignee,
-          status: 'Not Started',
-          deadline: dl,
-          fee: Number(tpl.fee||0),
-          advance: 0,
-          invoiceStatus: 'Not Raised',
-          notes: tpl.notes||'',
-          recur: true,
-          recurDay,
-          recurringId: rid,
-          period
+          id: crypto.randomUUID(), createdAt: Date.now(),
+          client: tpl.client, title: tpl.title, priority: tpl.priority,
+          assignee: tpl.assignee, status: 'Not Started', deadline: dl,
+          fee: Number(tpl.fee||0), advance: 0, invoiceStatus: 'Not Raised',
+          notes: tpl.notes||'', recur: true, recurDay, recurringId: rid, period
         });
       }
     }
   }
   save();
 }
-
 function syncSeriesFromTemplate(tpl){
   const rid = tpl.recurringId; if(!rid) return;
   const today = todayStr();
@@ -96,27 +126,30 @@ function syncSeriesFromTemplate(tpl){
   ensureRecurringInstances();
 }
 
-// ===== Demo Seed =====
+/* =========================
+   Demo Seed
+   ========================= */
 function seedDemo(){
   tasks = [
     {id:crypto.randomUUID(), client:'Multi Client (GSTR-1)', title:'GSTR-1 Filing', priority:'High', assignee:'Team GST', status:'Not Started', deadline: makeDateYMD(new Date().getFullYear(), new Date().getMonth(), 11), fee:1200, advance:0, invoiceStatus:'', notes:'Auto-generated monthly from template', createdAt:Date.now(), recur:true, recurDay:11, recurringId: crypto.randomUUID()},
     {id:crypto.randomUUID(), client:'BlueLeaf LLP', title:'Tax Audit – Form 3CB-3CD FY 24-25', priority:'High', assignee:'Netan', status:'Not Started', deadline:addDays(20), fee:85000, advance:20000, invoiceStatus:'', notes:'Engagement letter signed', createdAt:Date.now()-86400000},
     {id:crypto.randomUUID(), client:'Nova Foods', title:'Incorporation – OPC (SPICe+) corrections', priority:'High', assignee:'Pratik', status:'In Progress', deadline:addDays(5), fee:25000, advance:10000, invoiceStatus:addDays(-1), notes:'ROC resubmission comments to fix AOA', createdAt:Date.now()-3600}
   ];
-  tasks[0].period = undefined; // template
+  tasks[0].period = undefined;
   save(); ensureRecurringInstances(); render();
 }
 
-// ===== Selection (bulk delete) =====
+/* =========================
+   Selection / Bulk delete
+   ========================= */
 let selectedIds = new Set();
 function toggleSelect(id, checked){ checked ? selectedIds.add(id) : selectedIds.delete(id); updateSelectAllState(); }
 function updateSelectAllState(){
   const visibleRows = $$('#taskTbody tr');
   const visibleIds = new Set(visibleRows.map(r=>r.dataset.id));
   const allChecked = visibleRows.length>0 && [...visibleIds].every(id=>selectedIds.has(id));
-  $('#selectAll').checked = allChecked;
+  el('selectAll').checked = allChecked;
 }
-
 function bulkDelete(){
   const visibleRows = $$('#taskTbody tr');
   const visibleIds = new Set(visibleRows.map(r=>r.dataset.id));
@@ -140,21 +173,21 @@ function bulkDelete(){
   selectedIds.clear(); save(); render();
 }
 
-// ===== Rendering =====
-const tbody = document.getElementById('taskTbody');
-
+/* =========================
+   Rendering
+   ========================= */
+const tbody = el('taskTbody');
 function render(){
   ensureRecurringInstances();
 
-  const q = $('#searchInput').value.trim().toLowerCase();
-  const pf = $('#priorityFilter').value;
-  const sfRaw = $('#statusFilter').value;
+  const q = el('searchInput').value.trim().toLowerCase();
+  const pf = el('priorityFilter').value;
+  const sfRaw = el('statusFilter').value;
   const sf = sfRaw ? new Set(sfRaw.split('|')) : null;
-  const af = $('#assigneeFilter').value;
-  const mf = $('#monthFilter').value;
+  const af = el('assigneeFilter').value;
+  const mf = el('monthFilter').value;
 
   let filtered = tasks.filter(t => !(t.recur && !t.period));
-
   filtered = filtered.filter(t => {
     const matchQ = !q || [t.client,t.title,t.assignee,(t.notes||'')].some(x => String(x).toLowerCase().includes(q));
     const matchP = !pf || t.priority===pf;
@@ -164,7 +197,7 @@ function render(){
     return matchQ && matchP && matchS && matchA && matchM;
   });
 
-  const sortBy = $('#sortBy').value; const dir = $('#sortDir').value==='asc'?1:-1;
+  const sortBy = el('sortBy').value; const dir = el('sortDir').value==='asc'?1:-1;
   filtered.sort((a,b)=>{
     if(sortBy==='deadline') return (a.deadline||'').localeCompare(b.deadline||'')*dir;
     if(sortBy==='createdAt') return (a.createdAt-b.createdAt)*dir;
@@ -176,13 +209,13 @@ function render(){
 
   // Assignee options
   const assignees = [...new Set(tasks.filter(t=>!(t.recur && !t.period)).map(t=>t.assignee).filter(Boolean))];
-  const afSel = $('#assigneeFilter');
+  const afSel = el('assigneeFilter');
   const curA = afSel.value; afSel.innerHTML = '<option value="">In-Charge: All</option>' + assignees.map(a=>`<option ${a===curA?'selected':''}>${a}</option>`).join('');
 
-  // Month filter options
+  // Month options
   const months = [...new Set(tasks.filter(t=>t.deadline).map(t=>yymm(t.deadline)))].sort();
-  const mfSel = $('#monthFilter');
-  const curM = mfSel.value; mfSel.innerHTML = '<option value="">Month: All</option>' + months.map(m=>`<option ${m===curM?'selected':''} value="${m}">${formatMonthLabel(m)}</option>`).join('');
+  const mfSel = el('monthFilter');
+  const curM = mfSel.value; mfSel.innerHTML = '<option value="">Month: All</option>' + months.map(m=>`<option ${m===curM?'selected':''} value="${m}">${new Date(m+'-01').toLocaleString('en-IN',{month:'short', year:'numeric'})}</option>`).join('');
 
   // Rows
   tbody.innerHTML = filtered.map(t => rowHtml(t)).join('');
@@ -199,23 +232,14 @@ function render(){
   const sumFee = visible.reduce((s,t)=>s+Number(t.fee||0),0);
   const sumAdv = visible.reduce((s,t)=>s+Number(t.advance||0),0);
   const sumOut = sumFee - sumAdv;
-  $('#kpiTotal').textContent=total;
-  $('#kpiPending').textContent=pending;
-  $('#kpiOverdue').textContent=overdue;
-  $('#kpiFee').textContent=fmtMoney(sumFee);
-  $('#kpiAdv').textContent=fmtMoney(sumAdv);
-  $('#kpiOut').textContent=fmtMoney(sumOut);
-
-  updateSelectAllState();
+  el('kpiTotal').textContent=total;
+  el('kpiPending').textContent=pending;
+  el('kpiOverdue').textContent=overdue;
+  el('kpiFee').textContent=fmtMoney(sumFee);
+  el('kpiAdv').textContent=fmtMoney(sumAdv);
+  el('kpiOut').textContent=fmtMoney(sumOut);
 }
-
-function formatMonthLabel(m){
-  const [y, mo] = m.split('-').map(Number);
-  return new Date(y, mo-1, 1).toLocaleString('en-IN',{month:'short', year:'numeric'});
-}
-
 function prioRank(p){ return {High:1, Medium:2, Low:3}[p]||9; }
-
 function rowHtml(t){
   const out = (Number(t.fee||0) - Number(t.advance||0));
   const overdue = t.deadline && t.deadline < todayStr() && t.status !== 'Completed';
@@ -243,10 +267,11 @@ function rowHtml(t){
     <td><button class="btn ghost" onclick="editTask('${t.id}')">Edit</button></td>
   </tr>`;
 }
+function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
 
-function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;","<": "&lt;",">":"&gt;","\"":"&quot;"}[c]))}
-
-// ===== Actions =====
+/* =========================
+   Actions / Task Modal
+   ========================= */
 function changeStatus(id, val){ const t = tasks.find(x=>x.id===id); if(!t) return; t.status = val; save(); render(); }
 function delTask(id){
   const t = tasks.find(x=>x.id===id); if(!t) return;
@@ -267,75 +292,62 @@ function delTask(id){
 function editTask(id){
   const t = tasks.find(x=>x.id===id); if(!t) return;
   openTaskModal('Edit Task');
-  const form = document.getElementById('taskForm');
+  const form = el('taskForm');
   form.dataset.editId = id;
-  $('#fClient').value=t.client||'';
-  $('#fTitle').value=t.title||'';
-  $('#fPriority').value=t.priority||'Medium';
-  $('#fAssignee').value=t.assignee||'';
-  $('#fStatus').value=t.status||'In Progress';
-  $('#fDeadline').value=t.deadline||'';
-  $('#fFee').value=t.fee||0;
-  $('#fAdvance').value=t.advance||0;
-  $('#fInvoiceStatus').value = t.invoiceStatus || '';
-  $('#fNotes').value=t.notes||'';
-  $('#fRecurring').checked=!!t.recur && !t.period;
-}
-function changeInvoiceStatus(id, val){
-  const t = tasks.find(x=>x.id===id); if(!t) return;
-  t.invoiceStatus = val; save(); render();
+  el('fClient').value=t.client||'';
+  el('fTitle').value=t.title||'';
+  el('fPriority').value=t.priority||'Medium';
+  el('fAssignee').value=t.assignee||'';
+  el('fStatus').value=t.status||'In Progress';
+  el('fDeadline').value=t.deadline||'';
+  el('fFee').value=t.fee||0;
+  el('fAdvance').value=t.advance||0;
+  el('fInvoiceStatus').value = t.invoiceStatus || '';
+  el('fNotes').value=t.notes||'';
+  el('fRecurring').checked=!!t.recur && !t.period;
 }
 
-// ===== Task Modal wiring =====
-const taskModal = document.getElementById('taskModal');
-document.getElementById('addTaskBtn').addEventListener('click', ()=>{
+const taskModal = el('taskModal');
+el('addTaskBtn').addEventListener('click', ()=>{
   openTaskModal('New Task');
-  const form = document.getElementById('taskForm');
+  const form = el('taskForm');
   form.reset();
-  $('#fDeadline').value=todayStr();
+  el('fDeadline').value=todayStr();
   delete form.dataset.editId;
 });
-document.getElementById('cancelBtn').addEventListener('click', closeTaskModal);
+el('cancelBtn').addEventListener('click', closeTaskModal);
 taskModal.addEventListener('click', e=>{ if(e.target===taskModal) closeTaskModal(); });
-function openTaskModal(title){ $('#taskModalTitle').textContent=title; taskModal.classList.add('active'); setTimeout(()=>$('#fClient').focus(), 10); }
+function openTaskModal(title){ el('taskModalTitle').textContent=title; taskModal.classList.add('active'); setTimeout(()=>el('fClient').focus(), 10); }
 function closeTaskModal(){ taskModal.classList.remove('active'); }
 
-document.getElementById('taskForm').addEventListener('submit', e=>{
+el('taskForm').addEventListener('submit', e=>{
   e.preventDefault();
   const form = e.currentTarget;
   const editId = form.dataset.editId;
   const existing = editId ? tasks.find(x=>x.id===editId) : null;
 
-  const isRecurringTemplate = $('#fRecurring').checked;
-  const deadlineVal = $('#fDeadline').value;
+  const isRecurringTemplate = el('fRecurring').checked;
+  const deadlineVal = el('fDeadline').value;
   const recurDay = deadlineVal ? Number(deadlineVal.slice(8,10)) : new Date().getDate();
 
   const data = {
-    client: $('#fClient').value.trim(),
-    title: $('#fTitle').value.trim(),
-    priority: $('#fPriority').value,
-    assignee: $('#fAssignee').value.trim(),
-    status: $('#fStatus').value,
+    client: el('fClient').value.trim(),
+    title: el('fTitle').value.trim(),
+    priority: el('fPriority').value,
+    assignee: el('fAssignee').value.trim(),
+    status: el('fStatus').value,
     deadline: deadlineVal,
-    fee: Number($('#fFee').value||0),
-    advance: Number($('#fAdvance').value||0),
-    invoiceStatus: $('#fInvoiceStatus').value,
-    notes: $('#fNotes').value.trim()
+    fee: Number(el('fFee').value||0),
+    advance: Number(el('fAdvance').value||0),
+    invoiceStatus: el('fInvoiceStatus').value,
+    notes: el('fNotes').value.trim()
   };
   if(data.advance > data.fee){ alert('Advance cannot exceed total fee.'); return; }
 
   if(existing){
     const wasTemplate = !!existing.recur && !existing.period;
     if(wasTemplate){
-      existing.client = data.client;
-      existing.title = data.title;
-      existing.priority = data.priority;
-      existing.assignee = data.assignee;
-      existing.fee = data.fee;
-      existing.notes = data.notes;
-      existing.deadline = data.deadline;
-      existing.recur = true;
-      existing.recurDay = recurDay;
+      Object.assign(existing, {client:data.client,title:data.title,priority:data.priority,assignee:data.assignee,fee:data.fee,notes:data.notes,deadline:data.deadline,recur:true,recurDay});
       save(); syncSeriesFromTemplate(existing);
     } else {
       Object.assign(existing, data); save();
@@ -349,12 +361,13 @@ document.getElementById('taskForm').addEventListener('submit', e=>{
       tasks.push({id:crypto.randomUUID(), createdAt: Date.now(), ...data}); save();
     }
   }
-
   closeTaskModal(); render();
 });
 
-// ===== Export CSV =====
-$('#exportCsvBtn').addEventListener('click', ()=>{
+/* =========================
+   Export CSV
+   ========================= */
+el('exportCsvBtn').addEventListener('click', ()=>{
   const rows = [[
     'Client','Task','Priority','In-Charge','Status','Deadline','Fee','Advance','Outstanding','Invoice Status','Notes','Recurring','Recurring Day','Recurring ID','Period'
   ]];
@@ -370,47 +383,45 @@ $('#exportCsvBtn').addEventListener('click', ()=>{
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `CA-Tasks-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
 });
 
-// ===== Filters wiring =====
-['searchInput','priorityFilter','assigneeFilter','monthFilter','sortBy','sortDir']
-  .forEach(id=> document.getElementById(id).addEventListener('input', render));
+/* =========================
+   Filters wiring
+   ========================= */
+['searchInput','priorityFilter','assigneeFilter','monthFilter','sortBy','sortDir'].forEach(id=> el(id).addEventListener('input', render));
 
-// ===== Status Multi-select =====
+/* =========================
+   Status Multi-select
+   ========================= */
 const STATUS_OPTIONS = ['Not Started','In Progress','Waiting Client','On Hold','Completed'];
 (function initStatusMulti(){
-  const hidden = $('#statusFilter');
-  const btn = $('#statusMultiBtn');
-  const menu = $('#statusMultiMenu');
-  const applyBtn = $('#statusApplyBtn');
-  const clearBtn = $('#statusClearBtn');
-  const sel = new Set();
+  const hidden = el('statusFilter'), btn = el('statusMultiBtn'), menu = el('statusMultiMenu');
+  const applyBtn = el('statusApplyBtn'), clearBtn = el('statusClearBtn'); const sel = new Set();
   function updateButtonLabel(){ if(sel.size===0 || sel.size===STATUS_OPTIONS.length) btn.textContent='Status: All'; else btn.textContent=`Status: ${sel.size} selected`; }
   function syncHidden(){ hidden.value = (sel.size===0 || sel.size===STATUS_OPTIONS.length) ? '' : [...sel].join('|'); }
-  function open(){ menu.hidden=false; document.addEventListener('click', onDocClick, { once:false }); }
-  function close(){ menu.hidden=true; document.removeEventListener('click', onDocClick, { once:false }); }
+  function open(){ menu.hidden=false; document.addEventListener('click', onDocClick); }
+  function close(){ menu.hidden=true; document.removeEventListener('click', onDocClick); }
   function onDocClick(e){ if(menu.contains(e.target) || btn.contains(e.target)) return; close(); }
   btn.addEventListener('click', ()=>{ menu.hidden?open():close(); });
-  menu.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
-    cb.addEventListener('change', ()=>{ cb.checked ? sel.add(cb.value) : sel.delete(cb.value); });
-  });
+  menu.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.addEventListener('change', ()=>{ cb.checked ? sel.add(cb.value) : sel.delete(cb.value); }));
   applyBtn.addEventListener('click', ()=>{ syncHidden(); updateButtonLabel(); close(); render(); });
   clearBtn.addEventListener('click', ()=>{ sel.clear(); menu.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked=false); syncHidden(); updateButtonLabel(); close(); render(); });
-  if(hidden.value){ hidden.value.split('|').forEach(v=>{ if(STATUS_OPTIONS.includes(v)) sel.add(v); }); menu.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = sel.has(cb.value)); }
   updateButtonLabel();
 })();
 
-// Select-all wiring
-$('#selectAll').addEventListener('change', (e)=>{
+/* =========================
+   Select-all & Bulk delete
+   ========================= */
+el('selectAll').addEventListener('change', (e)=>{
   const rows = $$('#taskTbody tr');
   const ids = rows.map(r=>r.dataset.id);
   if(e.target.checked){ ids.forEach(id=>selectedIds.add(id)); }
   else { ids.forEach(id=>selectedIds.delete(id)); }
   render();
 });
+el('bulkDeleteBtn').addEventListener('click', bulkDelete);
 
-// Bulk delete button
-$('#bulkDeleteBtn').addEventListener('click', bulkDelete);
-
-// ===== Init =====
+/* =========================
+   Init
+   ========================= */
 function migrate(){
   for(const t of tasks){
     if(t.recur && t.period===undefined && !t.recurringId){ t.recurringId = crypto.randomUUID(); }
@@ -420,21 +431,19 @@ function migrate(){
 load(); migrate();
 if(tasks.length===0) seedDemo(); else { ensureRecurringInstances(); render(); }
 
-// ===== CREATE INVOICE FEATURE =====
-
-// Open/close modal
-const invoiceModal = $('#invoiceModal');
-$('#createInvoiceBtn').addEventListener('click', ()=>{
-  openInvoiceModal();
-  autoPopulateInvoiceMeta();
+/* =========================
+   CREATE INVOICE FEATURE
+   ========================= */
+const invoiceModal = el('invoiceModal');
+el('createInvoiceBtn').addEventListener('click', ()=>{
+  openInvoiceModal(); autoPopulateInvoiceMeta();
 });
-$('#invoiceCancelBtn').addEventListener('click', ()=> invoiceModal.classList.remove('active'));
+el('invoiceCancelBtn').addEventListener('click', ()=> invoiceModal.classList.remove('active'));
 invoiceModal.addEventListener('click', e=>{ if(e.target===invoiceModal) invoiceModal.classList.remove('active'); });
-function openInvoiceModal(){ $('#invoiceModalTitle').textContent='Create Invoice'; invoiceModal.classList.add('active'); setTimeout(()=>$('#invClient').focus(),10); }
+function openInvoiceModal(){ el('invoiceModalTitle').textContent='Create Invoice'; invoiceModal.classList.add('active'); setTimeout(()=>el('invClient').focus(),10); }
 
-// Service rows
-const serviceRows = $('#serviceRows');
-$('#addServiceRowBtn').addEventListener('click', addServiceRow);
+const serviceRows = el('serviceRows');
+el('addServiceRowBtn').addEventListener('click', addServiceRow);
 function addServiceRow(desc='', amt=''){
   const idx = serviceRows.children.length + 1;
   const row = document.createElement('div');
@@ -447,63 +456,43 @@ function addServiceRow(desc='', amt=''){
   `;
   serviceRows.appendChild(row);
   row.querySelector('.svc-amt').addEventListener('input', recomputeTotals);
-  row.querySelector('.svc-desc').addEventListener('input', ()=>{});
   row.querySelector('.remove').addEventListener('click', ()=>{
-    row.remove();
-    reindexServiceRows();
+    row.remove(); [...serviceRows.children].forEach((r,i)=>{ r.firstElementChild.textContent = String(i+1); });
     recomputeTotals();
   });
   recomputeTotals();
 }
-function reindexServiceRows(){ [...serviceRows.children].forEach((r,i)=>{ r.firstElementChild.textContent = String(i+1); }); }
-
-// Invoice numbering (auto but editable)
 function currentFY(dateObj){
-  const d = dateObj || new Date();
-  const y = d.getFullYear();
-  const m = d.getMonth(); // 0=Jan
+  const d = dateObj || new Date(), y = d.getFullYear(), m = d.getMonth();
   return (m>=3) ? `${y}-${String(y+1).slice(-2)}` : `${y-1}-${String(y).slice(-2)}`;
 }
 function nextInvoiceSequence(){
-  const seqKey = 'ca-invoice-seq';
-  const fyKey  = 'ca-invoice-fy';
-  const today = new Date();
-  const fy = currentFY(today);
+  const seqKey = 'ca-invoice-seq', fyKey  = 'ca-invoice-fy';
+  const today = new Date(); const fy = currentFY(today);
   const storedFY = localStorage.getItem(fyKey);
   let seq = Number(localStorage.getItem(seqKey) || 0);
   if(storedFY !== fy){ seq = 0; }
-  seq += 1;
-  localStorage.setItem(seqKey, String(seq));
-  localStorage.setItem(fyKey, fy);
+  seq += 1; localStorage.setItem(seqKey, String(seq)); localStorage.setItem(fyKey, fy);
   return { fy, seq };
 }
-function formatInvoiceNumber(prefix, fy, seq){
-  return `${prefix}/${fy}/${String(seq).padStart(3,'0')}`;
-}
+function formatInvoiceNumber(prefix, fy, seq){ return `${prefix}/${fy}/${String(seq).padStart(3,'0')}`; }
 function autoPopulateInvoiceMeta(){
-  $('#invDate').value = todayStr();
+  el('invDate').value = todayStr();
   const { fy, seq } = nextInvoiceSequence();
-  $('#invNumber').value = formatInvoiceNumber('INSIGHT', fy, seq);
-  // fresh default rows
-  serviceRows.innerHTML = '';
-  addServiceRow('', '');
-  $('#discountInput').value = 0;
-  recomputeTotals();
+  el('invNumber').value = formatInvoiceNumber('INSIGHT', fy, seq);
+  serviceRows.innerHTML = ''; addServiceRow('', '');
+  el('discountInput').value = 0; recomputeTotals();
 }
-
-// Totals + words
-$('#discountInput').addEventListener('input', recomputeTotals);
+el('discountInput').addEventListener('input', recomputeTotals);
 function recomputeTotals(){
   const amts = $$('.svc-amt', serviceRows).map(i=>Number(i.value||0));
   const sub = amts.reduce((s,n)=>s+n,0);
-  const disc = Number($('#discountInput').value||0);
+  const disc = Number(el('discountInput').value||0);
   const grand = Math.max(sub - disc, 0);
-  $('#subTotal').textContent = fmtMoney(sub);
-  $('#grandTotal').textContent = fmtMoney(grand);
-  $('#amountWords').textContent = toIndianWords(Math.round(grand)) + ' only';
+  el('subTotal').textContent = fmtMoney(sub);
+  el('grandTotal').textContent = fmtMoney(grand);
+  el('amountWords').textContent = toIndianWords(Math.round(grand)) + ' only';
 }
-
-// Indian number to words
 function toIndianWords(num){
   if(num===0) return 'Zero Rupees';
   const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -513,58 +502,44 @@ function toIndianWords(num){
   const crore = Math.floor(num/10000000); num%=10000000;
   const lakh = Math.floor(num/100000); num%=100000;
   const thousand = Math.floor(num/1000); num%=1000;
-  const hundred = num;
-  let out = '';
+  const hundred = num; let out = '';
   if(crore) out += `${three(crore)} Crore `;
   if(lakh) out += `${three(lakh)} Lakh `;
   if(thousand) out += `${three(thousand)} Thousand `;
   if(hundred) out += `${three(hundred)}`;
   return (out.trim() || 'Zero') + ' Rupees';
 }
-
-// Preview
-$('#previewInvoiceBtn').addEventListener('click', ()=>{
-  bindInvoicePreview();
-  window.open().document.write($('#invoiceA4').innerHTML);
+el('previewInvoiceBtn').addEventListener('click', ()=>{
+  bindInvoicePreview(); window.open().document.write(el('invoiceA4').innerHTML);
 });
-
-// Download PDF (high DPI, Chrome/Firefox friendly)
-$('#downloadPdfBtn').addEventListener('click', async ()=>{
+el('downloadPdfBtn').addEventListener('click', async ()=>{
   bindInvoicePreview();
-  const page = $('.a4');
-  const holder = $('#invoiceA4');
-  holder.style.visibility = 'visible';
-  holder.style.left = '0'; holder.style.top = '0'; holder.style.position = 'fixed';
+  const page = document.querySelector('.a4'), holder = el('invoiceA4');
+  holder.style.visibility = 'visible'; holder.style.left = '0'; holder.style.top = '0'; holder.style.position = 'fixed';
   const scale = Math.max(3, Math.ceil((window.devicePixelRatio || 1) * 2));
   const canvas = await html2canvas(page, { scale, useCORS: true, backgroundColor: '#FFFFFF', logging: false });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jspdf.jsPDF('p','mm','a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const imgWidth = pageWidth;
-  const imgHeight = canvas.height * imgWidth / canvas.width;
+  const imgWidth = pageWidth; const imgHeight = canvas.height * imgWidth / canvas.width;
   pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
-  const name = `${($('#invNumber').value||'Invoice').replace(/[^\w\-]+/g,'_')}.pdf`;
+  const name = `${(el('invNumber').value||'Invoice').replace(/[^\w\-]+/g,'_')}.pdf`;
   pdf.save(name);
-  holder.style.visibility = 'hidden';
-  holder.style.left = '-9999px'; holder.style.top = '-9999px';
+  holder.style.visibility = 'hidden'; holder.style.left = '-9999px'; holder.style.top = '-9999px';
 });
-
-// Bind data into the printable template
 function bindInvoicePreview(){
-  const ddmmyyyy = fmtDateDDMMYYYY($('#invDate').value);
-  $$('[data-bind="invNumber"]').forEach(el => el.textContent = $('#invNumber').value || '');
-  $$('[data-bind="invDateDDMM"]').forEach(el => el.textContent = ddmmyyyy || '');
-  $$('[data-bind="client"]').forEach(el => el.textContent = $('#invClient').value || '');
-  $$('[data-bind="address"]').forEach(el => el.textContent = $('#invAddress').value || '');
-  $$('[data-bind="email"]').forEach(el => el.textContent = $('#invEmail').value || '');
-  $$('[data-bind="mobile"]').forEach(el => el.textContent = $('#invMobile').value || '');
-  $$('[data-bind="subTotal"]').forEach(el => el.textContent = $('#subTotal').textContent || '0');
-  $$('[data-bind="discount"]').forEach(el => el.textContent = fmtMoney(Number($('#discountInput').value||0)));
-  $$('[data-bind="grandTotal"]').forEach(el => el.textContent = $('#grandTotal').textContent || '0');
-  $$('[data-bind="amountWords"]').forEach(el => el.textContent = $('#amountWords').textContent || '');
-  // rows
-  const tbody = $('[data-bind="rows"]');
-  tbody.innerHTML = '';
+  const ddmmyyyy = fmtDateDDMMYYYY(el('invDate').value);
+  $$('[data-bind="invNumber"]').forEach(elm => elm.textContent = el('invNumber').value || '');
+  $$('[data-bind="invDateDDMM"]').forEach(elm => elm.textContent = ddmmyyyy || '');
+  $$('[data-bind="client"]').forEach(elm => elm.textContent = el('invClient').value || '');
+  $$('[data-bind="address"]').forEach(elm => elm.textContent = el('invAddress').value || '');
+  $$('[data-bind="email"]').forEach(elm => elm.textContent = el('invEmail').value || '');
+  $$('[data-bind="mobile"]').forEach(elm => elm.textContent = el('invMobile').value || '');
+  $$('[data-bind="subTotal"]').forEach(elm => elm.textContent = el('subTotal').textContent || '0');
+  $$('[data-bind="discount"]').forEach(elm => elm.textContent = fmtMoney(Number(el('discountInput').value||0)));
+  $$('[data-bind="grandTotal"]').forEach(elm => elm.textContent = el('grandTotal').textContent || '0');
+  $$('[data-bind="amountWords"]').forEach(elm => elm.textContent = el('amountWords').textContent || '');
+  const tbody = document.querySelector('[data-bind="rows"]'); tbody.innerHTML = '';
   $$('.inv-row', serviceRows).forEach((r,i)=>{
     const desc = r.querySelector('.svc-desc').value.trim();
     const amt  = Number(r.querySelector('.svc-amt').value||0);
@@ -575,93 +550,147 @@ function bindInvoicePreview(){
   });
 }
 
-// ===== EDIT INVOICE (Upload PDF -> auto-fill the Create form) =====
-const editModal = $('#editInvoiceModal');
-$('#openEditInvoiceBtn').addEventListener('click', ()=>{ openEditInvoiceModal(); });
-$('#editCancelBtn').addEventListener('click', ()=> editModal.classList.remove('active'));
+/* =========================
+   EDIT INVOICE (Upload PDF)
+   ========================= */
+const editModal = el('editInvoiceModal');
+el('openEditInvoiceBtn').addEventListener('click', ()=>{ openEditInvoiceModal(); });
+el('editCancelBtn').addEventListener('click', ()=> editModal.classList.remove('active'));
 editModal.addEventListener('click', e=>{ if(e.target===editModal) editModal.classList.remove('active'); });
 
 function openEditInvoiceModal(){
-  $('#parseLog').innerHTML = 'Select or drop a PDF generated by this app.';
-  $('#pdfInput').value = '';
+  el('parseLog').innerHTML = 'Select or drop a PDF generated by this app.';
+  el('pdfInput').value = '';
   editModal.classList.add('active');
+  // Show current library diagnostics
+  reportDebugInfo();
 }
-
-// drag/drop
-const drop = $('#pdfDrop');
+const drop = el('pdfDrop');
 drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('hover'); });
 drop.addEventListener('dragleave', ()=> drop.classList.remove('hover'));
 drop.addEventListener('drop', e=>{
   e.preventDefault(); drop.classList.remove('hover');
   const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) handlePdfFile(f);
 });
-$('#pdfInput').addEventListener('change', e=>{
+el('pdfInput').addEventListener('change', e=>{
   const f = e.currentTarget.files && e.currentTarget.files[0]; if(f) handlePdfFile(f);
 });
 
+/* Debug toggle button */
+el('debugToggleBtn').addEventListener('click', ()=>{
+  if (localStorage.getItem('__DEBUG')) { localStorage.removeItem('__DEBUG'); }
+  else { localStorage.setItem('__DEBUG','1'); }
+  alert('Debug is now ' + (localStorage.getItem('__DEBUG') ? 'ON' : 'OFF') + '. Reload to apply.');
+});
+
 async function handlePdfFile(file){
-  const log = $('#parseLog');
+  const steps = [];
+  const log = el('parseLog');
+  function fail(code, err, advice=''){
+    const base = `❌ ${code}${advice?` — ${advice}`:''}`;
+    pushStep(steps, base, code);
+    if (err) { dlog(code, err); }
+  }
+  function ok(msg){ pushStep(steps, `✅ ${msg}`); }
+
   try{
-    log.innerHTML = 'Reading PDF…';
+    // 0) Basic lib checks
+    if (!window.pdfjsLib){ fail('E_NO_LIB_PDFJS', null, 'pdf.js not loaded'); return; }
+    ok('pdf.js present');
 
-    // Read file as ArrayBuffer to avoid blob URL/GC timing issues
-    const buf = await file.arrayBuffer();
-
-    // Ensure pdf.js worker is configured (defensive)
-    if (window.pdfjsLib && (!pdfjsLib.GlobalWorkerOptions.workerSrc || !/pdf\.worker/.test(pdfjsLib.GlobalWorkerOptions.workerSrc))) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.worker.min.js";
+    if (!window.__pdfWorkerSet){
+      // If file:// protocol, workers are commonly blocked
+      const advice = (location.protocol === 'file:') ? 'Worker likely blocked on file:// — serve via http:// (e.g., VSCode Live Server).' : 'Worker not set — check network.';
+      fail('E_WORKER_NOT_SET', null, advice);
+      // we still try; pdf.js can fall back in some environments
+    } else {
+      ok('pdf.js worker configured');
     }
 
-    // Load document
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    if (!window.Tesseract){ fail('E_NO_LIB_TESSERACT', null, 'tesseract.js not loaded (OCR fallback unavailable)'); }
+    else ok('tesseract.js present');
 
-    // We expect a single page invoice; still, concatenate all pages’ text
+    // 1) Read file buffer
+    ok('Reading file (ArrayBuffer)…');
+    const buf = await file.arrayBuffer();
+
+    // 2) Open PDF
+    ok('Opening PDF with pdf.js…');
+    let pdf;
+    try{
+      pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    }catch(openErr){
+      fail('E_PDF_OPEN', openErr, 'Could not open PDF — ensure it is a valid PDF file');
+      return;
+    }
+    ok(`PDF opened (${pdf.numPages} page(s))`);
+
+    // 3) Extract text from all pages
     let textAll = '';
     for (let p = 1; p <= pdf.numPages; p++){
       const page = await pdf.getPage(p);
       const tc = await page.getTextContent();
-      textAll += tc.items.map(i => (i.str||'').trim()).filter(Boolean).join('\n') + '\n';
+      const chunk = tc.items.map(i => (i.str||'').trim()).filter(Boolean).join('\n');
+      textAll += chunk + '\n';
     }
+    if (textAll.trim()){
+      ok('Embedded text found via pdf.js');
+    } else {
+      pushStep(steps, 'ℹ️ No embedded text found — attempting OCR…');
 
-    // If pdf.js extracted nothing (likely image-only PDF), OCR the first page
-    if (!textAll.trim()){
-      log.innerHTML = 'No embedded text found. Running OCR…';
-
+      // 4) OCR the first page (image-only PDFs)
+      if (!window.Tesseract){
+        fail('E_NO_TEXT_NO_OCR', null, 'No text & OCR lib missing — cannot parse');
+        return;
+      }
       const page1 = await pdf.getPage(1);
-      const viewport = page1.getViewport({ scale: 2.4 }); // high scale for better OCR
+      const viewport = page1.getViewport({ scale: 2.6 });
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
-      await page1.render({ canvasContext: ctx, viewport }).promise;
+      try{
+        await page1.render({ canvasContext: ctx, viewport }).promise;
+        ok('Rendered page 1 to canvas for OCR');
+      } catch(rendErr){
+        fail('E_RENDER_PAGE', rendErr, 'Could not render page for OCR');
+        return;
+      }
 
-      const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
-        logger: () => {} // mute
-      });
-      textAll = (text || '').replace(/\r/g,'').trim();
+      try{
+        const res = await Tesseract.recognize(canvas, 'eng', { logger: (m)=>{ if(DEBUG) dlog('OCR', m); } });
+        textAll = (res && res.data && res.data.text || '').replace(/\r/g,'').trim();
+        if (textAll) ok('OCR text extracted');
+        else { fail('E_OCR_EMPTY', null, 'OCR produced empty text'); return; }
+      }catch(ocrErr){
+        fail('E_OCR_FAIL', ocrErr, 'tesseract.js error');
+        return;
+      }
     }
 
-    if (!textAll){
-      log.innerHTML = '<span style="color:#ffb4b4">Could not read this PDF. Ensure it was generated by this app and try again.</span>';
+    // 5) Parse invoice text
+    ok('Parsing invoice text…');
+    const parsed = parseInvoiceText(textAll);
+    if (!parsed || (!parsed.invNo && !parsed.name && (!parsed.services || !parsed.services.length))){
+      fail('E_PARSE_EMPTY', null, 'Parser did not find expected fields');
       return;
     }
+    ok('Parser produced fields');
 
-    // Parse and apply
-    const parsed = parseInvoiceText(textAll);
+    // 6) Apply to form
+    ok('Applying fields to Create Invoice form…');
     applyParsedToForm(parsed);
     recomputeTotals();
     bindInvoicePreview();
-
-    log.innerHTML = '<span style="color:#a6f3c1">Parsed successfully. Fields populated in Create Invoice.</span>';
+    ok('Done — form populated');
     setTimeout(()=> editModal.classList.remove('active'), 900);
 
   }catch(err){
-    console.error(err);
-    log.innerHTML = '<span style="color:#ffb4b4">Could not read this PDF. Ensure it was generated by this app and try again.</span>';
+    fail('E_UNCAUGHT', err, 'Unexpected error (see console)');
   }
 }
 
-// Parsing logic tailored to our invoice layout
+/* ============ Parser tailored to our invoice layout ============ */
 function parseInvoiceText(txt){
   const T = (txt||'').replace(/\r/g,'').replace(/[ \t]+\n/g,'\n');
 
@@ -734,30 +763,26 @@ function parseInvoiceText(txt){
   };
 }
 
-// Apply parsed fields into Create Invoice form
+/* Apply parsed fields into Create Invoice form */
 function applyParsedToForm(p){
-  if(p.invNo) $('#invNumber').value = p.invNo;
-  if(p.invDateISO) $('#invDate').value = p.invDateISO;
-  if(p.name) $('#invClient').value = p.name;
-  if(p.email) $('#invEmail').value = p.email;
-  if(p.mobile) $('#invMobile').value = p.mobile;
-  if(p.address) $('#invAddress').value = p.address;
+  if(p.invNo) el('invNumber').value = p.invNo;
+  if(p.invDateISO) el('invDate').value = p.invDateISO;
+  if(p.name) el('invClient').value = p.name;
+  if(p.email) el('invEmail').value = p.email;
+  if(p.mobile) el('invMobile').value = p.mobile;
+  if(p.address) el('invAddress').value = p.address;
 
   if(Array.isArray(p.services) && p.services.length){
     serviceRows.innerHTML = '';
     p.services.forEach(s => addServiceRow(s.desc || '', String(s.amt || '')));
   }
-
-  if(Number.isFinite(p.discount)) $('#discountInput').value = p.discount;
+  if(Number.isFinite(p.discount)) el('discountInput').value = p.discount;
 }
 
-// ===== END: Edit Invoice =====
-
-// Helpers
-function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
-
-// Demo reset
-const resetBtn = $('#resetDemoBtn');
+/* =========================
+   Misc
+   ========================= */
+const resetBtn = el('resetDemoBtn');
 if(resetBtn){
   resetBtn.addEventListener('click', ()=>{
     if(confirm('Reset demo data?')){ localStorage.clear(); load(); seedDemo(); }
