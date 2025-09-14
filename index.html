@@ -162,6 +162,34 @@
     <footer class="note">Insight at work: organize, analyze, achieve.</footer>
   </div>
 
+  <!-- Modal: Add/Edit Task -->
+  <div class="modal" id="taskModal" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+    <div class="dialog">
+      <header><h2 id="taskModalTitle">New Task</h2></header>
+      <form id="taskForm">
+        <div class="body">
+          <div class="dialog grid2">
+            <div><label>Client Name</label><input required id="fClient" placeholder="Client / Entity" /></div>
+            <div><label>Task Title</label><input required id="fTitle" placeholder="e.g., GSTR-1 Filing" /></div>
+            <div><label>Priority</label><select id="fPriority" required><option>High</option><option selected>Medium</option><option>Low</option></select></div>
+            <div><label>In-Charge</label><input required id="fAssignee" placeholder="Team member" /></div>
+            <div><label>Status</label><select id="fStatus" required><option>Not Started</option><option selected>In Progress</option><option>Waiting Client</option><option>On Hold</option><option>Completed</option></select></div>
+            <div><label>Deadline</label><input type="date" id="fDeadline" required /></div>
+            <div><label>Fee (₹)</label><input type="number" step="0.01" min="0" id="fFee" required /></div>
+            <div><label>Received (₹)</label><input type="number" step="0.01" min="0" id="fAdvance" value="0" /></div>
+            <div><label>Invoice Status</label><select id="fInvoiceStatus"><option value="">Select status…</option><option>Not Raised</option><option>Sent</option><option>Paid</option><option>Partially Paid</option></select></div>
+            <div><label>Notes / Description</label><textarea id="fNotes" placeholder="Brief details, documents pending, etc."></textarea></div>
+            <div><label><input type="checkbox" id="fRecurring" /> Recurring monthly</label><small class="hint">If checked, this becomes a template. The app will auto-create monthly instances on the same day as the deadline.</small></div>
+          </div>
+        </div>
+        <footer>
+          <button type="button" class="btn ghost" id="cancelBtn">Cancel</button>
+          <button class="btn primary" type="submit" id="saveBtn">Save Task</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: Create Invoice -->
   <div class="modal" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle">
     <div class="dialog">
@@ -197,23 +225,50 @@
             </div>
           </div>
 
-  <!-- Modal: Edit Invoice (Upload PDF) -->
-  <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
-    <div class="dialog">
-      <header><h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2></header>
-      <div class="body">
-        <div class="edit-grid">
-          <div class="uploader" id="pdfDrop">
-            <input type="file" id="pdfInput" accept="application/pdf" />
-            <p><strong>Drop your invoice PDF here</strong> or click to select.</p>
-            <small>Tip: Use an invoice previously downloaded from this app for best results.</small>
-          </div>
-          <div class="parse-log" id="parseLog" aria-live="polite"></div>
+          <!-- DEBUG PANEL -->
+          <details id="debugPanel" style="margin-top:12px; border:1px solid var(--line); border-radius:10px; padding:8px;">
+            <summary><strong>Debug Log</strong> (library status & last operation)</summary>
+            <div id="debugInfo" style="font-size:12px; color:var(--muted); white-space:pre-wrap;"></div>
+          </details>
         </div>
-      </div>
-      <footer><button type="button" class="btn ghost" id="editCancelBtn">Close</button></footer>
+        <footer>
+          <button type="button" class="btn ghost" id="invoiceCancelBtn">Cancel</button>
+          <button type="button" class="btn" id="previewInvoiceBtn">Preview</button>
+          <button type="button" class="btn primary" id="downloadPdfBtn">Download PDF</button>
+        </footer>
+      </form>
     </div>
   </div>
+
+  <!-- Modal: Edit Invoice (Upload PDF) -->
+  <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
+  <div class="dialog">
+    <header>
+      <h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2>
+    </header>
+    <div class="body">
+      <div class="edit-grid">
+        <div class="uploader" id="pdfDrop">
+          <input type="file" id="pdfInput" accept="application/pdf" />
+          <p><strong>Drop your invoice PDF here</strong> or click to select.</p>
+          <small>Tip: Use an invoice previously downloaded from this app for best results.</small>
+        </div>
+
+        <!-- ✅ Debug info section placed right after uploader -->
+        <div id="parseLog" class="parse-log" aria-live="polite"></div>
+        <details style="margin-top:8px;">
+          <summary>🔍 Debug Log</summary>
+          <pre id="debugInfo" style="background:#f9f9f9; padding:8px; border:1px solid #ddd; max-height:200px; overflow:auto;"></pre>
+        </details>
+        <!-- ✅ End Debug info -->
+      </div>
+    </div>
+    <footer>
+      <button type="button" class="btn ghost" id="editCancelBtn">Close</button>
+    </footer>
+  </div>
+</div>
+
 
   <!-- Hidden A4 Invoice Template (render target for PDF) -->
   <div id="invoiceA4" aria-hidden="true">
