@@ -273,6 +273,16 @@ function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;
    Actions / Task Modal
    ========================= */
 function changeStatus(id, val){ const t = tasks.find(x=>x.id===id); if(!t) return; t.status = val; save(); render(); }
+
+function changeInvoiceStatus(id, val){
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  t.invoiceStatus = val;   // update the task object
+  save();                  // persist to localStorage
+  render();                // re-render the table
+}
+window.changeInvoiceStatus = changeInvoiceStatus; // needed for inline onchange
+
 function delTask(id){
   const t = tasks.find(x=>x.id===id); if(!t) return;
   if(t.recur && !t.period && t.recurringId){
