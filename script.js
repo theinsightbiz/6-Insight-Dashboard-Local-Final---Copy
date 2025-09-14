@@ -519,24 +519,46 @@ function toIndianWords(num){
   if(hundred) out += `${three(hundred)}`;
   return (out.trim() || 'Zero') + ' Rupees';
 }
-el('previewInvoiceBtn').addEventListener('click', ()=>{
-  bindInvoicePreview(); window.open().document.write(el('invoiceA4').innerHTML);
-});
 el('downloadPdfBtn').addEventListener('click', async ()=>{
   bindInvoicePreview();
-  const page = document.querySelector('.a4'), holder = el('invoiceA4');
-  holder.style.visibility = 'visible'; holder.style.left = '0'; holder.style.top = '0'; holder.style.position = 'fixed';
-  const scale = Math.max(3, Math.ceil((window.devicePixelRatio || 1) * 2));
-  const canvas = await html2canvas(page, { scale, useCORS: true, backgroundColor: '#FFFFFF', logging: false });
-  const imgData = canvas.toDataURL('image/png');
+  const page = document.querySelector('.a4'),
+        holder = el('invoiceA4');
+  
+  // Show for capture
+  holder.style.visibility = 'visible';
+  holder.style.left = '0';
+  holder.style.top = '0';
+  holder.style.position = 'fixed';
+
+  // Use lower but sharp scale (around 2 is enough for print clarity)
+  const scale = 2;  
+  const canvas = await html2canvas(page, {
+    scale,
+    useCORS: true,
+    backgroundColor: '#FFFFFF',
+    logging: false
+  });
+
+  // ✅ Export as JPEG with 0.85 quality (instead of PNG)
+  const imgData = canvas.toDataURL('image/jpeg', 0.85);
+
   const pdf = new jspdf.jsPDF('p','mm','a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
-  const imgWidth = pageWidth; const imgHeight = canvas.height * imgWidth / canvas.width;
-  pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+  const imgWidth = pageWidth;
+  const imgHeight = canvas.height * imgWidth / canvas.width;
+
+  // Insert JPEG instead of PNG
+  pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
+
   const name = `${(el('invNumber').value||'Invoice').replace(/[^\w\-]+/g,'_')}.pdf`;
   pdf.save(name);
-  holder.style.visibility = 'hidden'; holder.style.left = '-9999px'; holder.style.top = '-9999px';
+
+  // Hide again
+  holder.style.visibility = 'hidden';
+  holder.style.left = '-9999px';
+  holder.style.top = '-9999px';
 });
+
 function bindInvoicePreview(){
   const ddmmyyyy = fmtDateDDMMYYYY(el('invDate').value);
   $$('[data-bind="invNumber"]').forEach(elm => elm.textContent = el('invNumber').value || '');
