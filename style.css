@@ -184,3 +184,36 @@ select option, select optgroup, .status option { background: var(--field); color
   body{background:#fff}
   .a4{box-shadow:none}
 }
+
+/* 🔵 Add Task button */
+#addTaskBtn {
+  background-color: #4CAF50; /* Green */
+  color: white;
+  border-color: #4CAF50;
+}
+
+/* 🟦 Create Invoice button */
+#createInvoiceBtn {
+  background-color: #2196F3; /* Blue */
+  color: white;
+  border-color: #2196F3;
+}
+
+/* 🔴 Bulk Delete button */
+#bulkDeleteBtn {
+  background-color: #f44336; /* Red */
+  color: white;
+  border-color: #f44336;
+}
+
+/* 🟧 Export CSV button */
+#exportCsvBtn {
+  background-color: #ff9800; /* Orange */
+  color: white;
+  border-color: #ff9800;
+}
+
+#addTaskBtn:hover { background-color: #45a049 !important; border-color: #45a049 !important; }
+#createInvoiceBtn:hover { background-color: #1976D2 !important; border-color: #1976D2 !important; }
+#bulkDeleteBtn:hover { background-color: #d32f2f !important; border-color: #d32f2f !important; }
+#exportCsvBtn:hover { background-color: #e68900 !important; border-color: #e68900 !important; }
