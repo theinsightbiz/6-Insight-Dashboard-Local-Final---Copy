@@ -168,7 +168,11 @@
         <div class="body">
           <div class="dialog grid2">
             <div><label>Client Name</label><input required id="fClient" placeholder="Client / Entity" /></div>
-            <div><label>Task Title</label><input required id="fTitle" placeholder="e.g., GSTR-1 Filing" list="titleOptions" /></div><datalist id="titleOptions"></datalist>
+            <div><label>Task Title</label>
+  <select id="fTitle" required class="select">
+    <!-- JS builds options automatically -->
+  </select>
+</div>
             <div><label>Priority</label><select id="fPriority" required><option>High</option><option selected>Medium</option><option>Low</option></select></div>
             <div><label>In-Charge</label><input required id="fAssignee" placeholder="Team member" /></div>
             <div><label>Status</label><select id="fStatus" required><option>Not Started</option><option selected>In Progress</option><option>Waiting Client</option><option>On Hold</option><option>Completed</option></select></div>

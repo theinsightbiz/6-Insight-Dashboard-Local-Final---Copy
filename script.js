@@ -137,7 +137,6 @@ function seedDemo(){
   ];
   tasks[0].period = undefined;
   save(); ensureRecurringInstances(); render();
-refreshTitleOptions();
 }
 
 /* =========================
@@ -179,6 +178,8 @@ function bulkDelete(){
    ========================= */
 const tbody = el('taskTbody');
 function render(){
+  // keep Task Title select options fresh if modal is open
+  try{ const sv = el('fTitle') ? el('fTitle').value : ''; buildTitleSelect(sv); }catch(_e){}
   ensureRecurringInstances();
 
   const q = el('searchInput').value.trim().toLowerCase();
@@ -240,9 +241,6 @@ function render(){
   el('kpiAdv').textContent=fmtMoney(sumAdv);
   el('kpiOut').textContent=fmtMoney(sumOut);
 }
-  // keep Task Title dropdown in sync
-  refreshTitleOptions();
-
 function prioRank(p){ return {High:1, Medium:2, Low:3}[p]||9; }
 function rowHtml(t){
   const out = (Number(t.fee||0) - Number(t.advance||0));
@@ -271,30 +269,57 @@ function rowHtml(t){
     <td><button class="btn ghost" onclick="editTask('${t.id}')">Edit</button></td>
   </tr>`;
 }
-function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
+function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}
 
 /* =========================
-   Title dropdown (datalist) sync
+   Task Title <select> (with "Add new…")
    ========================= */
-function refreshTitleOptions(){
-  const dl = document.getElementById('titleOptions');
-  if (!dl) return;
+function uniqueTaskTitles(){
   const seen = new Set();
   const titles = [];
-  for (const t of tasks){
-    const title = (t && t.title ? String(t.title).trim() : '');
-    if (title && !seen.has(title)){
-      seen.add(title); titles.push(title);
+  for(const t of tasks){
+    const val = (t && t.title ? String(t.title).trim() : '');
+    if(val && !seen.has(val)){ seen.add(val); titles.push(val); }
+  }
+  titles.sort((a,b)=>a.localeCompare(b));
+  return titles;
+}
+
+function buildTitleSelect(selectedValue){
+  const sel = el('fTitle');
+  if(!sel) return;
+  const titles = uniqueTaskTitles();
+  // Build options
+  const parts = [];
+  parts.push('<option value="" disabled ' + (!selectedValue ? 'selected' : '') + '>Select task title…</option>');
+  for(const t of titles){
+    const escT = String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    parts.push(`<option value="${escT}" ${t===selectedValue?'selected':''}>${escT}</option>`);
+  }
+  parts.push('<option value="__NEW__">➕ Add new title…</option>');
+  sel.innerHTML = parts.join('');
+}
+
+function handleTitleSelectChange(e){
+  const sel = e.currentTarget;
+  if(sel.value === '__NEW__'){
+    const v = (prompt('Enter new task title:')||'').trim();
+    if(v){
+      // Insert new option (if not present), select it
+      let opt = Array.from(sel.options).find(o=>o.value===v);
+      if(!opt){
+        opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.insertBefore(opt, sel.querySelector('option[value="__NEW__"]'));
+      }
+      sel.value = v;
+    } else {
+      // revert to placeholder
+      sel.value = '';
     }
   }
-  titles.sort((a,b)=> a.localeCompare(b));
-  while (dl.firstChild) dl.removeChild(dl.firstChild);
-  for (const t of titles){
-    const opt = document.createElement('option');
-    opt.value = t;
-    dl.appendChild(opt);
-  }
 }
+[c]))}
 
 /* =========================
    Actions / Task Modal
@@ -332,7 +357,7 @@ function editTask(id){
   const form = el('taskForm');
   form.dataset.editId = id;
   el('fClient').value=t.client||'';
-  el('fTitle').value=t.title||'';
+  buildTitleSelect(t.title||'');
   el('fPriority').value=t.priority||'Medium';
   el('fAssignee').value=t.assignee||'';
   el('fStatus').value=t.status||'In Progress';
@@ -351,6 +376,7 @@ el('addTaskBtn').addEventListener('click', ()=>{
   form.reset();
   el('fDeadline').value=todayStr();
   delete form.dataset.editId;
+  buildTitleSelect('');
 });
 el('cancelBtn').addEventListener('click', closeTaskModal);
 taskModal.addEventListener('click', e=>{ if(e.target===taskModal) closeTaskModal(); });
@@ -467,6 +493,8 @@ function migrate(){
 }
 load(); migrate();
 if(tasks.length===0) seedDemo(); else { ensureRecurringInstances(); render(); }
+// bind once: select change for 'Add new title…'
+try{ el('fTitle').addEventListener('change', handleTitleSelectChange); }catch(_e){}
 
 /* =========================
    CREATE INVOICE FEATURE
