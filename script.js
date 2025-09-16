@@ -137,6 +137,7 @@ function seedDemo(){
   ];
   tasks[0].period = undefined;
   save(); ensureRecurringInstances(); render();
+refreshTitleOptions();
 }
 
 /* =========================
@@ -239,6 +240,9 @@ function render(){
   el('kpiAdv').textContent=fmtMoney(sumAdv);
   el('kpiOut').textContent=fmtMoney(sumOut);
 }
+  // keep Task Title dropdown in sync
+  refreshTitleOptions();
+
 function prioRank(p){ return {High:1, Medium:2, Low:3}[p]||9; }
 function rowHtml(t){
   const out = (Number(t.fee||0) - Number(t.advance||0));
@@ -268,6 +272,29 @@ function rowHtml(t){
   </tr>`;
 }
 function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
+
+/* =========================
+   Title dropdown (datalist) sync
+   ========================= */
+function refreshTitleOptions(){
+  const dl = document.getElementById('titleOptions');
+  if (!dl) return;
+  const seen = new Set();
+  const titles = [];
+  for (const t of tasks){
+    const title = (t && t.title ? String(t.title).trim() : '');
+    if (title && !seen.has(title)){
+      seen.add(title); titles.push(title);
+    }
+  }
+  titles.sort((a,b)=> a.localeCompare(b));
+  while (dl.firstChild) dl.removeChild(dl.firstChild);
+  for (const t of titles){
+    const opt = document.createElement('option');
+    opt.value = t;
+    dl.appendChild(opt);
+  }
+}
 
 /* =========================
    Actions / Task Modal
