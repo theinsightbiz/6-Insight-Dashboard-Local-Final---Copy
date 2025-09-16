@@ -178,8 +178,6 @@ function bulkDelete(){
    ========================= */
 const tbody = el('taskTbody');
 function render(){
-  // keep Task Title select options fresh if modal is open
-  try{ const sv = el('fTitle') ? el('fTitle').value : ''; buildTitleSelect(sv); }catch(_e){}
   ensureRecurringInstances();
 
   const q = el('searchInput').value.trim().toLowerCase();
@@ -240,6 +238,9 @@ function render(){
   el('kpiFee').textContent=fmtMoney(sumFee);
   el('kpiAdv').textContent=fmtMoney(sumAdv);
   el('kpiOut').textContent=fmtMoney(sumOut);
+
+  try{ refreshTitleOptions(); }catch(e){}
+  try{ refreshClientOptions(); }catch(e){}
 }
 function prioRank(p){ return {High:1, Medium:2, Low:3}[p]||9; }
 function rowHtml(t){
@@ -269,57 +270,69 @@ function rowHtml(t){
     <td><button class="btn ghost" onclick="editTask('${t.id}')">Edit</button></td>
   </tr>`;
 }
-function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}
+function esc(s){return String(s).replace(/[&<>\"]+/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
 
 /* =========================
-   Task Title <select> (with "Add new…")
+   Task Title dropdown (select + custom)
    ========================= */
-function uniqueTaskTitles(){
-  const seen = new Set();
-  const titles = [];
+function getAllTitles(){
+  const seen = new Set(); const out = [];
   for(const t of tasks){
-    const val = (t && t.title ? String(t.title).trim() : '');
-    if(val && !seen.has(val)){ seen.add(val); titles.push(val); }
+    const title = (t && t.title ? String(t.title).trim() : '');
+    if(title && !seen.has(title)){ seen.add(title); out.push(title); }
   }
-  titles.sort((a,b)=>a.localeCompare(b));
-  return titles;
+  out.sort((a,b)=> a.localeCompare(b));
+  return out;
 }
-
-function buildTitleSelect(selectedValue){
-  const sel = el('fTitle');
+function refreshTitleOptions(){
+  const sel = document.getElementById('fTitleSelect');
   if(!sel) return;
-  const titles = uniqueTaskTitles();
-  // Build options
-  const parts = [];
-  parts.push('<option value="" disabled ' + (!selectedValue ? 'selected' : '') + '>Select task title…</option>');
-  for(const t of titles){
-    const escT = String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    parts.push(`<option value="${escT}" ${t===selectedValue?'selected':''}>${escT}</option>`);
-  }
-  parts.push('<option value="__NEW__">➕ Add new title…</option>');
-  sel.innerHTML = parts.join('');
+  const cur = sel.value;
+  const titles = getAllTitles();
+  const opts = ['<option value="">Select Title</option>']
+    .concat(titles.map(t=>`<option value="${t.replace(/"/g,'&quot;')}">${t.replace(/</g,'&lt;')}</option>`))
+    .concat(['<option value="__new__">➕ New title…</option>']);
+  sel.innerHTML = opts.join('');
+  if(cur && [...sel.options].some(o=>o.value===cur)){ sel.value = cur; }
+  toggleTitleCustom(sel.value);
+}
+function toggleTitleCustom(val){
+  const custom = document.getElementById('fTitleNew');
+  if(!custom) return;
+  custom.style.display = (val==='__new__') ? '' : 'none';
 }
 
-function handleTitleSelectChange(e){
-  const sel = e.currentTarget;
-  if(sel.value === '__NEW__'){
-    const v = (prompt('Enter new task title:')||'').trim();
-    if(v){
-      // Insert new option (if not present), select it
-      let opt = Array.from(sel.options).find(o=>o.value===v);
-      if(!opt){
-        opt = document.createElement('option');
-        opt.value = v; opt.textContent = v;
-        sel.insertBefore(opt, sel.querySelector('option[value="__NEW__"]'));
-      }
-      sel.value = v;
-    } else {
-      // revert to placeholder
-      sel.value = '';
-    }
+/* =========================
+   Client dropdown (select + custom)
+   ========================= */
+function getAllClients(){
+  const seen = new Set(); const out = [];
+  for(const t of tasks){
+    const client = (t && t.client ? String(t.client).trim() : '');
+    if(client && !seen.has(client)){ seen.add(client); out.push(client); }
   }
+  out.sort((a,b)=> a.localeCompare(b));
+  return out;
 }
-[c]))}
+function refreshClientOptions(){
+  const sel = document.getElementById('fClientSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  const clients = getAllClients();
+  const opts = ['<option value="">Select Client</option>']
+    .concat(clients.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">${c.replace(/</g,'&lt;')}</option>`))
+    .concat(['<option value="__new__">➕ New client…</option>']);
+  sel.innerHTML = opts.join('');
+  if(cur && [...sel.options].some(o=>o.value===cur)){ sel.value = cur; }
+  toggleClientCustom(sel.value);
+}
+function toggleClientCustom(val){
+  const custom = document.getElementById('fClientNew');
+  if(!custom) return;
+  custom.style.display = (val==='__new__') ? '' : 'none';
+}
+
+
 
 /* =========================
    Actions / Task Modal
@@ -356,8 +369,8 @@ function editTask(id){
   openTaskModal('Edit Task');
   const form = el('taskForm');
   form.dataset.editId = id;
-  el('fClient').value=t.client||'';
-  buildTitleSelect(t.title||'');
+  /* client handled via select/custom */
+  /* title handled via select/custom */
   el('fPriority').value=t.priority||'Medium';
   el('fAssignee').value=t.assignee||'';
   el('fStatus').value=t.status||'In Progress';
@@ -367,6 +380,38 @@ function editTask(id){
   el('fInvoiceStatus').value = t.invoiceStatus || '';
   el('fNotes').value=t.notes||'';
   el('fRecurring').checked=!!t.recur && !t.period;
+
+  // Populate title select/custom
+  try{
+    refreshTitleOptions();
+    (function(){
+      const sel = el('fTitleSelect');
+      const custom = el('fTitleNew');
+      const hidden = el('fTitle');
+      const title = t.title||'';
+      if(sel && [...sel.options].some(o=>o.value===title)){
+        sel.value = title; toggleTitleCustom(sel.value); if(custom) custom.value=''; if(hidden) hidden.value=title;
+      } else if(sel){
+        sel.value='__new__'; toggleTitleCustom(sel.value); if(custom) custom.value=title; if(hidden) hidden.value=title;
+      }
+    })();
+  }catch(e){}
+
+  // Populate client select/custom
+  try{
+    refreshClientOptions();
+    (function(){
+      const sel = el('fClientSelect');
+      const custom = el('fClientNew');
+      const hidden = el('fClient');
+      const client = t.client||'';
+      if(sel && [...sel.options].some(o=>o.value===client)){
+        sel.value = client; toggleClientCustom(sel.value); if(custom) custom.value=''; if(hidden) hidden.value=client;
+      } else if(sel){
+        sel.value='__new__'; toggleClientCustom(sel.value); if(custom) custom.value=client; if(hidden) hidden.value=client;
+      }
+    })();
+  }catch(e){}
 }
 
 const taskModal = el('taskModal');
@@ -376,14 +421,84 @@ el('addTaskBtn').addEventListener('click', ()=>{
   form.reset();
   el('fDeadline').value=todayStr();
   delete form.dataset.editId;
-  buildTitleSelect('');
+
+  // Reset title select/custom for new task
+  try{
+    refreshTitleOptions();
+    const selT = el('fTitleSelect'); const customT = el('fTitleNew'); const hiddenT = el('fTitle');
+    if(selT){ selT.value=''; toggleTitleCustom(selT.value); }
+    if(customT){ customT.value=''; }
+    if(hiddenT){ hiddenT.value=''; }
+  }catch(e){}
+
+  // Reset client select/custom for new task
+  try{
+    refreshClientOptions();
+    const selC = el('fClientSelect'); const customC = el('fClientNew'); const hiddenC = el('fClient');
+    if(selC){ selC.value=''; toggleClientCustom(selC.value); }
+    if(customC){ customC.value=''; }
+    if(hiddenC){ hiddenC.value=''; }
+  }catch(e){}
 });
 el('cancelBtn').addEventListener('click', closeTaskModal);
 taskModal.addEventListener('click', e=>{ if(e.target===taskModal) closeTaskModal(); });
-function openTaskModal(title){ el('taskModalTitle').textContent=title; taskModal.classList.add('active'); setTimeout(()=>el('fClient').focus(), 10); }
+function openTaskModal(title){ el('taskModalTitle').textContent=title; taskModal.classList.add('active'); setTimeout(()=>{ (el('fClientSelect')||el('fClient')||{}).focus && (el('fClientSelect')||el('fClient')).focus(); }, 10); }
 function closeTaskModal(){ taskModal.classList.remove('active'); }
 
+// Title select change -> show/hide custom input and keep hidden #fTitle in sync
+(function initTitleSelect(){
+  const sel = el('fTitleSelect');
+  const hidden = el('fTitle');
+  const custom = el('fTitleNew');
+  if(!sel || !hidden || !custom) return;
+  sel.addEventListener('change', ()=>{
+    toggleTitleCustom(sel.value);
+    if(sel.value==='__new__'){
+      custom.focus();
+      hidden.value = (custom.value||'').trim();
+    } else {
+      hidden.value = (sel.value||'').trim();
+    }
+  });
+  custom.addEventListener('input', ()=>{
+    if(sel.value==='__new__'){
+      hidden.value = (custom.value||'').trim();
+    }
+  });
+})();
+
+// Client select change -> show/hide custom input and keep hidden #fClient in sync
+(function initClientSelect(){
+  const sel = el('fClientSelect');
+  const hidden = el('fClient');
+  const custom = el('fClientNew');
+  if(!sel || !hidden || !custom) return;
+  sel.addEventListener('change', ()=>{
+    toggleClientCustom(sel.value);
+    if(sel.value==='__new__'){
+      custom.focus();
+      hidden.value = (custom.value||'').trim();
+    } else {
+      hidden.value = (sel.value||'').trim();
+    }
+  });
+  custom.addEventListener('input', ()=>{
+    if(sel.value==='__new__'){
+      hidden.value = (custom.value||'').trim();
+    }
+  });
+})();
+
+
+
 el('taskForm').addEventListener('submit', e=>{
+  // Ensure Title & Client chosen correctly from selects
+  const _selT = el('fTitleSelect'), _newT = el('fTitleNew');
+  const _selC = el('fClientSelect'), _newC = el('fClientNew');
+  const _titleVal = _selT ? (_selT.value==='__new__' ? (_newT && _newT.value.trim()) : _selT.value.trim()) : (el('fTitle') && el('fTitle').value.trim());
+  const _clientVal = _selC ? (_selC.value==='__new__' ? (_newC && _newC.value.trim()) : _selC.value.trim()) : (el('fClient') && el('fClient').value.trim());
+  if(!_titleVal){ e.preventDefault(); alert('Please select a Task Title or enter a new one.'); return; }
+  if(!_clientVal){ e.preventDefault(); alert('Please select a Client or enter a new one.'); return; }
   e.preventDefault();
   const form = e.currentTarget;
   const editId = form.dataset.editId;
@@ -394,8 +509,8 @@ el('taskForm').addEventListener('submit', e=>{
   const recurDay = deadlineVal ? Number(deadlineVal.slice(8,10)) : new Date().getDate();
 
   const data = {
-    client: el('fClient').value.trim(),
-    title: el('fTitle').value.trim(),
+    client: _clientVal,
+    title: _titleVal,
     priority: el('fPriority').value,
     assignee: el('fAssignee').value.trim(),
     status: el('fStatus').value,
@@ -493,8 +608,7 @@ function migrate(){
 }
 load(); migrate();
 if(tasks.length===0) seedDemo(); else { ensureRecurringInstances(); render(); }
-// bind once: select change for 'Add new title…'
-try{ el('fTitle').addEventListener('change', handleTitleSelectChange); }catch(_e){}
+try{ refreshTitleOptions(); refreshClientOptions(); }catch(e){}
 
 /* =========================
    CREATE INVOICE FEATURE

@@ -167,12 +167,29 @@
       <form id="taskForm">
         <div class="body">
           <div class="dialog grid2">
-            <div><label>Client Name</label><input required id="fClient" placeholder="Client / Entity" /></div>
-            <div><label>Task Title</label>
-  <select id="fTitle" required class="select">
-    <!-- JS builds options automatically -->
+            <div>
+  <label>Client Name</label>
+  <select id="fClientSelect" class="select" aria-label="Client (existing)">
+    <option value="">Select Client</option>
   </select>
+  <!-- Shown only when "New client…" is selected -->
+  <input id="fClientNew" placeholder="Enter new client" style="display:none;margin-top:6px;" />
+  <!-- Hidden value used for form submission compatibility -->
+  <input id="fClient" type="hidden" />
+  <small class="hint">Pick an existing client, or choose “New client…” to type a fresh one.</small>
 </div>
+            <div>
+              <label>Task Title</label>
+              <select id="fTitleSelect" class="select" aria-label="Task Title (existing)">
+                <option value="">Select Title</option>
+              </select>
+              <!-- Shown only when "New title…" is selected -->
+              <input id="fTitleNew" placeholder="Enter new title" style="display:none;margin-top:6px;" />
+              <!-- Hidden value used for form submission compatibility -->
+              <input id="fTitle" type="hidden" />
+              <small class="hint">Pick an existing title, or choose “New title…” to type a fresh one.</small>
+            </div>
+    
             <div><label>Priority</label><select id="fPriority" required><option>High</option><option selected>Medium</option><option>Low</option></select></div>
             <div><label>In-Charge</label><input required id="fAssignee" placeholder="Team member" /></div>
             <div><label>Status</label><select id="fStatus" required><option>Not Started</option><option selected>In Progress</option><option>Waiting Client</option><option>On Hold</option><option>Completed</option></select></div>
