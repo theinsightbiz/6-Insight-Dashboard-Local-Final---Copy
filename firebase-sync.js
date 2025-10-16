@@ -1,4 +1,4 @@
-// firebase-sync.js — Auth + Firestore mirror with robust first-sync & save() shim
+// firebase-sync.js — Auth + Firestore mirror with legacy-doc migration + save() shim
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, GoogleAuthProvider,
@@ -26,17 +26,15 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 
 // Optional offline cache
-try { await enableIndexedDbPersistence(db); } catch (e) {
-  console.debug('[firebase-sync] IndexedDB persistence not enabled:', e?.message || e);
-}
+try { await enableIndexedDbPersistence(db); } catch {}
 
-// UI hooks
+/* ---------- UI hooks ---------- */
 const $ = (id)=>document.getElementById(id);
 const signinBtn  = $('signinBtn');
 const signoutBtn = $('signoutBtn');
 const userBadge  = $('userBadge');
 
-// Local ↔ Cloud state
+/* ---------- Local ↔ Cloud state ---------- */
 const LS_KEY = 'ca-dashboard-tasks-v1';
 const PATH   = (uid)=> `users/${uid}/state`;
 const DOC_ID = 'app_v1';
@@ -45,17 +43,17 @@ let isApplyingRemote = false;
 let lastAppliedRemoteAt = 0;
 let unsubscribeCloud = null;
 
-function readLocal() {
+function readLocal(){
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
   catch { return []; }
 }
-function writeLocal(arr) {
+function writeLocal(arr){
   localStorage.setItem(LS_KEY, JSON.stringify(arr ?? []));
 }
 function debounce(fn, ms=400){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 const pushToCloudDebounced = debounce(pushToCloud, 700);
 
-// ---- IMPORTANT: shim your app's save() so cloud sync ALWAYS fires ----
+/* ---------- Shim your app's save() so cloud sync ALWAYS fires ---------- */
 (function shimSave(){
   const original = window.save;
   window.save = function patchedSave(){
@@ -66,7 +64,15 @@ const pushToCloudDebounced = debounce(pushToCloud, 700);
   };
 })();
 
-// Local ➜ Cloud
+/* ---------- Helpers ---------- */
+function isLikelySingleTaskDoc(obj){
+  if (!obj || typeof obj !== 'object') return false;
+  // typical task fields your app uses
+  const indicative = ['title','client','status','priority','assignee','deadline','id'];
+  return !Array.isArray(obj.tasks) && indicative.some(k => k in obj);
+}
+
+/* ---------- Local ➜ Cloud ---------- */
 async function pushToCloud(uid){
   if(!uid) return;
   const tasks = readLocal();
@@ -74,53 +80,65 @@ async function pushToCloud(uid){
   await setDoc(ref, { tasks, updatedAt: serverTimestamp() }, { merge: true });
 }
 
-// Cloud ➜ Local
+/* ---------- Cloud ➜ Local (with migration) ---------- */
 async function startCloudSubscription(user){
-  if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
+  if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud = null; }
 
   if(!user){
-    if (signinBtn)  signinBtn.style.display  = '';
-    if (signoutBtn) signoutBtn.style.display = 'none';
-    if (userBadge)  userBadge.textContent    = '';
+    signinBtn?.style?.setProperty('display','');
+    signoutBtn?.style?.setProperty('display','none');
+    if (userBadge) userBadge.textContent = '';
     return;
   }
 
-  if (signinBtn)  signinBtn.style.display  = 'none';
-  if (signoutBtn) signoutBtn.style.display = '';
-  if (userBadge)  userBadge.textContent    = `Signed in as ${user.displayName || user.email || user.uid}`;
+  signinBtn?.style?.setProperty('display','none');
+  signoutBtn?.style?.setProperty('display','');
+  if (userBadge) userBadge.textContent = `Signed in as ${user.displayName || user.email || user.uid}`;
 
   const ref = doc(db, PATH(user.uid), DOC_ID);
-
-  // ---------- FIRST-SYNC STRATEGY ----------
-  // If cloud doc exists but is EMPTY and local has tasks → PUSH local → cloud.
-  // Else (cloud has data) → ADOPT cloud → local (single source of truth).
-  const snap = await getDoc(ref);
   const localNow = readLocal();
+
+  // Read current cloud doc
+  const snap = await getDoc(ref);
   if(!snap.exists()){
-    // No cloud doc yet → seed with whatever local has (even if empty).
+    // no cloud yet → seed from local (even if empty)
     await setDoc(ref, { tasks: Array.isArray(localNow)?localNow:[], updatedAt: serverTimestamp() }, { merge: true });
   }else{
-    const cloud = snap.data();
-    const remoteTasks = Array.isArray(cloud?.tasks) ? cloud.tasks : [];
+    let cloud = snap.data() || {};
+    // ---- MIGRATION: legacy single-task-at-root → wrap into tasks array ----
+    if (isLikelySingleTaskDoc(cloud)) {
+      const legacy = { ...cloud };
+      delete legacy.updatedAt; // keep only task fields
+      await setDoc(ref, { tasks: [legacy], updatedAt: serverTimestamp() }, { merge: true });
+      cloud = { tasks: [legacy] };
+    }
+
+    const remoteTasks = Array.isArray(cloud.tasks) ? cloud.tasks : [];
     const remoteEmpty = remoteTasks.length === 0;
     const localHas    = Array.isArray(localNow) && localNow.length > 0;
 
-    if (remoteEmpty && localHas) {
-      // Prefer local when cloud is empty
+    // First-sync policy: if cloud empty but local has tasks → push local to cloud.
+    if (remoteEmpty && localHas){
       await setDoc(ref, { tasks: localNow, updatedAt: serverTimestamp() }, { merge: true });
-    } else {
-      // Prefer cloud when it has any data
+    }else{
       writeLocal(remoteTasks);
       lastAppliedRemoteAt = Date.now();
       window.__cloudSync_onLocalDataReplaced?.();
     }
   }
 
-  // Live updates
+  // Live subscription (with migration if someone writes legacy again)
   unsubscribeCloud = onSnapshot(ref, (docSnap)=>{
     if(!docSnap.exists()) return;
-    const data = docSnap.data();
-    const remoteTasks = Array.isArray(data?.tasks) ? data.tasks : [];
+    let data = docSnap.data() || {};
+    if (isLikelySingleTaskDoc(data)) {
+      // migrate in listener too; then local will be updated on next snapshot
+      const legacy = { ...data };
+      delete legacy.updatedAt;
+      setDoc(ref, { tasks: [legacy], updatedAt: serverTimestamp() }, { merge: true });
+      return;
+    }
+    const remoteTasks = Array.isArray(data.tasks) ? data.tasks : [];
     if (Date.now() - lastAppliedRemoteAt < 500) return; // skip echo
     isApplyingRemote = true;
     writeLocal(remoteTasks);
@@ -129,14 +147,13 @@ async function startCloudSubscription(user){
   });
 }
 
-// Attach handlers with popup→redirect fallback + redirect result processing
+/* ---------- Auth handlers (popup→redirect fallback) ---------- */
 if (signinBtn) {
   signinBtn.addEventListener('click', async ()=>{
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (e) {
-      console.warn('[firebase-sync] Popup failed, using redirect:', e?.code, e?.message);
       try {
         const provider = new GoogleAuthProvider();
         await signInWithRedirect(auth, provider);
@@ -147,26 +164,17 @@ if (signinBtn) {
     }
   });
 }
-if (signoutBtn) {
-  signoutBtn.addEventListener('click', ()=> signOut(auth));
-}
+if (signoutBtn) signoutBtn.addEventListener('click', ()=> signOut(auth));
 
-try {
-  const res = await getRedirectResult(auth);
-  if (res?.user) console.log('[firebase-sync] Redirect sign-in completed for:', res.user.uid);
-} catch (e) {
-  console.warn('[firebase-sync] getRedirectResult error:', e?.code, e?.message);
+try { await getRedirectResult(auth); } catch (e) {
   if (e?.code === 'auth/unauthorized-domain') {
     alert('This domain is not authorized for sign-in in Firebase Auth settings.');
   }
 }
 
-onAuthStateChanged(auth, (user)=> {
-  console.log('[firebase-sync] auth state:', user ? user.uid : 'signed-out');
-  startCloudSubscription(user);
-});
+onAuthStateChanged(auth, (user)=> { startCloudSubscription(user); });
 
-// Public hooks for your app (used by the shimmed save())
+/* ---------- Public hooks for your app ---------- */
 window.__cloudSync_notifyLocalChanged = function(){
   if (isApplyingRemote) return;
   const uid = auth.currentUser?.uid;
@@ -178,5 +186,3 @@ window.__cloudSync_onLocalDataReplaced = function(){
     if(window.render) window.render();
   }catch(e){ console.error(e); }
 };
-
-console.log('[firebase-sync] ready. authDomain:', firebaseConfig.authDomain);
