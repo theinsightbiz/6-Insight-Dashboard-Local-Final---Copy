@@ -27,11 +27,9 @@ function reportDebugInfo(extra=''){
   if (extra) info.push(`\nLast Operation:\n${extra}`);
   const target = el('debugInfo'); if (target) target.textContent = info.join('\n');
 }
-
 function formatStepLog(steps){
   return steps.map(s => `${s.t} — ${s.msg}${s.code?` [${s.code}]`:''}`).join('\n');
 }
-
 function pushStep(steps, msg, code=''){
   const entry = { t: nowTs(), msg, code };
   steps.push(entry);
@@ -40,10 +38,15 @@ function pushStep(steps, msg, code=''){
 }
 
 /* =========================
-   Existing Utilities
+   Safe DOM helpers (prevents null addEventListener crashes)
    ========================= */
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
 const $  = (sel, root=document) => root.querySelector(sel);
+function onId(id, evt, fn){
+  const node = el(id);
+  if (node) node.addEventListener(evt, fn);
+  else console.warn(`[wire] #${id} not found; skipped ${evt} binding`);
+}
 const fmtMoney = n => (Number(n||0)).toLocaleString('en-IN',{maximumFractionDigits:2});
 const todayStr = () => new Date().toISOString().slice(0,10);
 const yymm = (dstr) => (dstr||'').slice(0,7);
@@ -152,7 +155,7 @@ function updateSelectAllState(){
   const visibleRows = $$('#taskTbody tr');
   const visibleIds = new Set(visibleRows.map(r=>r.dataset.id));
   const allChecked = visibleRows.length>0 && [...visibleIds].every(id=>selectedIds.has(id));
-  el('selectAll').checked = allChecked;
+  const selAll = el('selectAll'); if (selAll) selAll.checked = allChecked;
 }
 function bulkDelete(){
   const visibleRows = $$('#taskTbody tr');
@@ -184,12 +187,12 @@ const tbody = el('taskTbody');
 function render(){
   ensureRecurringInstances();
 
-  const q = el('searchInput').value.trim().toLowerCase();
-  const pf = el('priorityFilter').value;
-  const sfRaw = el('statusFilter').value;
+  const q = (el('searchInput')?.value || '').trim().toLowerCase();
+  const pf = el('priorityFilter')?.value || '';
+  const sfRaw = el('statusFilter')?.value || '';
   const sf = sfRaw ? new Set(sfRaw.split('|')) : null;
-  const af = el('assigneeFilter').value;
-  const mf = el('monthFilter').value;
+  const af = el('assigneeFilter')?.value || '';
+  const mf = el('monthFilter')?.value || '';
 
   let filtered = tasks.filter(t => !(t.recur && !t.period));
   filtered = filtered.filter(t => {
@@ -201,7 +204,8 @@ function render(){
     return matchQ && matchP && matchS && matchA && matchM;
   });
 
-  const sortBy = el('sortBy').value; const dir = el('sortDir').value==='asc'?1:-1;
+  const sortBy = el('sortBy')?.value || 'deadline';
+  const dir = (el('sortDir')?.value || 'asc')==='asc'?1:-1;
   filtered.sort((a,b)=>{
     if(sortBy==='deadline') return (a.deadline||'').localeCompare(b.deadline||'')*dir;
     if(sortBy==='createdAt') return (a.createdAt-b.createdAt)*dir;
@@ -214,15 +218,19 @@ function render(){
   // Assignee options
   const assignees = [...new Set(tasks.filter(t=>!(t.recur && !t.period)).map(t=>t.assignee).filter(Boolean))];
   const afSel = el('assigneeFilter');
-  const curA = afSel.value; afSel.innerHTML = '<option value="">In-Charge: All</option>' + assignees.map(a=>`<option ${a===curA?'selected':''}>${a}</option>`).join('');
+  if (afSel){
+    const curA = afSel.value; afSel.innerHTML = '<option value="">In-Charge: All</option>' + assignees.map(a=>`<option ${a===curA?'selected':''}>${a}</option>`).join('');
+  }
 
   // Month options
   const months = [...new Set(tasks.filter(t=>t.deadline).map(t=>yymm(t.deadline)))].sort();
   const mfSel = el('monthFilter');
-  const curM = mfSel.value; mfSel.innerHTML = '<option value="">Month: All</option>' + months.map(m=>`<option ${m===curM?'selected':''} value="${m}">${new Date(m+'-01').toLocaleString('en-IN',{month:'short', year:'numeric'})}</option>`).join('');
+  if (mfSel){
+    const curM = mfSel.value; mfSel.innerHTML = '<option value="">Month: All</option>' + months.map(m=>`<option ${m===curM?'selected':''} value="${m}">${new Date(m+'-01').toLocaleString('en-IN',{month:'short', year:'numeric'})}</option>`).join('');
+  }
 
   // Rows
-  tbody.innerHTML = filtered.map(t => rowHtml(t)).join('');
+  if (tbody) tbody.innerHTML = filtered.map(t => rowHtml(t)).join('');
 
   // re-check selected
   for(const cb of $$('#taskTbody input[type="checkbox"].row-select')){ cb.checked = selectedIds.has(cb.dataset.id); }
@@ -236,12 +244,12 @@ function render(){
   const sumFee = visible.reduce((s,t)=>s+Number(t.fee||0),0);
   const sumAdv = visible.reduce((s,t)=>s+Number(t.advance||0),0);
   const sumOut = sumFee - sumAdv;
-  el('kpiTotal').textContent=total;
-  el('kpiPending').textContent=pending;
-  el('kpiOverdue').textContent=overdue;
-  el('kpiFee').textContent=fmtMoney(sumFee);
-  el('kpiAdv').textContent=fmtMoney(sumAdv);
-  el('kpiOut').textContent=fmtMoney(sumOut);
+  el('kpiTotal') && (el('kpiTotal').textContent=total);
+  el('kpiPending') && (el('kpiPending').textContent=pending);
+  el('kpiOverdue') && (el('kpiOverdue').textContent=overdue);
+  el('kpiFee') && (el('kpiFee').textContent=fmtMoney(sumFee));
+  el('kpiAdv') && (el('kpiAdv').textContent=fmtMoney(sumAdv));
+  el('kpiOut') && (el('kpiOut').textContent=fmtMoney(sumOut));
 
   try{ refreshTitleOptions(); }catch(e){}
   try{ refreshClientOptions(); }catch(e){}
@@ -336,8 +344,6 @@ function toggleClientCustom(val){
   custom.style.display = (val==='__new__') ? '' : 'none';
 }
 
-
-
 /* =========================
    Actions / Task Modal
    ========================= */
@@ -346,9 +352,9 @@ function changeStatus(id, val){ const t = tasks.find(x=>x.id===id); if(!t) retur
 function changeInvoiceStatus(id, val){
   const t = tasks.find(x => x.id === id);
   if (!t) return;
-  t.invoiceStatus = val;   // update the task object
-  save();                  // persist to localStorage
-  render();                // re-render the table
+  t.invoiceStatus = val;
+  save();
+  render();
 }
 window.changeInvoiceStatus = changeInvoiceStatus; // needed for inline onchange
 
@@ -372,20 +378,18 @@ function editTask(id){
   const t = tasks.find(x=>x.id===id); if(!t) return;
   openTaskModal('Edit Task');
   const form = el('taskForm');
+  if (!form) return;
   form.dataset.editId = id;
-  /* client handled via select/custom */
-  /* title handled via select/custom */
-  el('fPriority').value=t.priority||'Medium';
-  el('fAssignee').value=t.assignee||'';
-  el('fStatus').value=t.status||'In Progress';
-  el('fDeadline').value=t.deadline||'';
-  el('fFee').value=t.fee||0;
-  el('fAdvance').value=t.advance||0;
-  el('fInvoiceStatus').value = t.invoiceStatus || '';
-  el('fNotes').value=t.notes||'';
-  el('fRecurring').checked=!!t.recur && !t.period;
+  el('fPriority') && (el('fPriority').value=t.priority||'Medium');
+  el('fAssignee') && (el('fAssignee').value=t.assignee||'');
+  el('fStatus') && (el('fStatus').value=t.status||'In Progress');
+  el('fDeadline') && (el('fDeadline').value=t.deadline||'');
+  el('fFee') && (el('fFee').value=t.fee||0);
+  el('fAdvance') && (el('fAdvance').value=t.advance||0);
+  el('fInvoiceStatus') && (el('fInvoiceStatus').value = t.invoiceStatus || '');
+  el('fNotes') && (el('fNotes').value=t.notes||'');
+  el('fRecurring') && (el('fRecurring').checked=!!t.recur && !t.period);
 
-  // Populate title select/custom
   try{
     refreshTitleOptions();
     (function(){
@@ -401,7 +405,6 @@ function editTask(id){
     })();
   }catch(e){}
 
-  // Populate client select/custom
   try{
     refreshClientOptions();
     (function(){
@@ -419,14 +422,14 @@ function editTask(id){
 }
 
 const taskModal = el('taskModal');
-el('addTaskBtn').addEventListener('click', ()=>{
+onId('addTaskBtn','click', ()=>{
   openTaskModal('New Task');
   const form = el('taskForm');
+  if (!form) return;
   form.reset();
-  el('fDeadline').value=todayStr();
+  el('fDeadline') && (el('fDeadline').value=todayStr());
   delete form.dataset.editId;
 
-  // Reset title select/custom for new task
   try{
     refreshTitleOptions();
     const selT = el('fTitleSelect'); const customT = el('fTitleNew'); const hiddenT = el('fTitle');
@@ -435,7 +438,6 @@ el('addTaskBtn').addEventListener('click', ()=>{
     if(hiddenT){ hiddenT.value=''; }
   }catch(e){}
 
-  // Reset client select/custom for new task
   try{
     refreshClientOptions();
     const selC = el('fClientSelect'); const customC = el('fClientNew'); const hiddenC = el('fClient');
@@ -444,12 +446,12 @@ el('addTaskBtn').addEventListener('click', ()=>{
     if(hiddenC){ hiddenC.value=''; }
   }catch(e){}
 });
-el('cancelBtn').addEventListener('click', closeTaskModal);
-taskModal.addEventListener('click', e=>{ if(e.target===taskModal) closeTaskModal(); });
-function openTaskModal(title){ el('taskModalTitle').textContent=title; taskModal.classList.add('active'); setTimeout(()=>{ (el('fClientSelect')||el('fClient')||{}).focus && (el('fClientSelect')||el('fClient')).focus(); }, 10); }
-function closeTaskModal(){ taskModal.classList.remove('active'); }
+onId('cancelBtn','click', closeTaskModal);
+if (taskModal) taskModal.addEventListener('click', e=>{ if(e.target===taskModal) closeTaskModal(); });
+function openTaskModal(title){ el('taskModalTitle') && (el('taskModalTitle').textContent=title); taskModal && taskModal.classList.add('active'); setTimeout(()=>{ (el('fClientSelect')||el('fClient')||{}).focus && (el('fClientSelect')||el('fClient')).focus(); }, 10); }
+function closeTaskModal(){ taskModal && taskModal.classList.remove('active'); }
 
-// Title select change -> show/hide custom input and keep hidden #fTitle in sync
+// Title select change
 (function initTitleSelect(){
   const sel = el('fTitleSelect');
   const hidden = el('fTitle');
@@ -464,14 +466,10 @@ function closeTaskModal(){ taskModal.classList.remove('active'); }
       hidden.value = (sel.value||'').trim();
     }
   });
-  custom.addEventListener('input', ()=>{
-    if(sel.value==='__new__'){
-      hidden.value = (custom.value||'').trim();
-    }
-  });
+  custom.addEventListener('input', ()=>{ if(sel.value==='__new__'){ hidden.value = (custom.value||'').trim(); } });
 })();
 
-// Client select change -> show/hide custom input and keep hidden #fClient in sync
+// Client select change
 (function initClientSelect(){
   const sel = el('fClientSelect');
   const hidden = el('fClient');
@@ -486,17 +484,10 @@ function closeTaskModal(){ taskModal.classList.remove('active'); }
       hidden.value = (sel.value||'').trim();
     }
   });
-  custom.addEventListener('input', ()=>{
-    if(sel.value==='__new__'){
-      hidden.value = (custom.value||'').trim();
-    }
-  });
+  custom.addEventListener('input', ()=>{ if(sel.value==='__new__'){ hidden.value = (custom.value||'').trim(); } });
 })();
 
-
-
-el('taskForm').addEventListener('submit', e=>{
-  // Ensure Title & Client chosen correctly from selects
+onId('taskForm','submit', e=>{
   const _selT = el('fTitleSelect'), _newT = el('fTitleNew');
   const _selC = el('fClientSelect'), _newC = el('fClientNew');
   const _titleVal = _selT ? (_selT.value==='__new__' ? (_newT && _newT.value.trim()) : _selT.value.trim()) : (el('fTitle') && el('fTitle').value.trim());
@@ -508,21 +499,21 @@ el('taskForm').addEventListener('submit', e=>{
   const editId = form.dataset.editId;
   const existing = editId ? tasks.find(x=>x.id===editId) : null;
 
-  const isRecurringTemplate = el('fRecurring').checked;
-  const deadlineVal = el('fDeadline').value;
+  const isRecurringTemplate = el('fRecurring')?.checked;
+  const deadlineVal = el('fDeadline')?.value || '';
   const recurDay = deadlineVal ? Number(deadlineVal.slice(8,10)) : new Date().getDate();
 
   const data = {
     client: _clientVal,
     title: _titleVal,
-    priority: el('fPriority').value,
-    assignee: el('fAssignee').value.trim(),
-    status: el('fStatus').value,
+    priority: el('fPriority')?.value || 'Medium',
+    assignee: (el('fAssignee')?.value || '').trim(),
+    status: el('fStatus')?.value || 'In Progress',
     deadline: deadlineVal,
-    fee: Number(el('fFee').value||0),
-    advance: Number(el('fAdvance').value||0),
-    invoiceStatus: el('fInvoiceStatus').value,
-    notes: el('fNotes').value.trim()
+    fee: Number(el('fFee')?.value||0),
+    advance: Number(el('fAdvance')?.value||0),
+    invoiceStatus: el('fInvoiceStatus')?.value || '',
+    notes: (el('fNotes')?.value || '').trim()
   };
   if(data.advance > data.fee){ alert('Advance cannot exceed total fee.'); return; }
 
@@ -549,7 +540,7 @@ el('taskForm').addEventListener('submit', e=>{
 /* =========================
    Export CSV
    ========================= */
-el('exportCsvBtn').addEventListener('click', ()=>{
+onId('exportCsvBtn','click', ()=>{
   const rows = [[
     'Client','Task','Priority','In-Charge','Status','Deadline','Fee','Advance','Outstanding','Invoice Status','Notes','Recurring','Recurring Day','Recurring ID','Period'
   ]];
@@ -566,9 +557,10 @@ el('exportCsvBtn').addEventListener('click', ()=>{
 });
 
 /* =========================
-   Filters wiring
+   Filters wiring (safe)
    ========================= */
-['searchInput','priorityFilter','assigneeFilter','monthFilter','sortBy','sortDir'].forEach(id=> el(id).addEventListener('input', render));
+['searchInput','priorityFilter','assigneeFilter','monthFilter','sortBy','sortDir']
+  .forEach(id=> onId(id,'input', render));
 
 /* =========================
    Status Multi-select
@@ -577,6 +569,7 @@ const STATUS_OPTIONS = ['Not Started','In Progress','Waiting Client','On Hold','
 (function initStatusMulti(){
   const hidden = el('statusFilter'), btn = el('statusMultiBtn'), menu = el('statusMultiMenu');
   const applyBtn = el('statusApplyBtn'), clearBtn = el('statusClearBtn'); const sel = new Set();
+  if(!hidden || !btn || !menu || !applyBtn || !clearBtn) { console.warn('[wire] status multi controls missing; skipping'); return; }
   function updateButtonLabel(){ if(sel.size===0 || sel.size===STATUS_OPTIONS.length) btn.textContent='Status: All'; else btn.textContent=`Status: ${sel.size} selected`; }
   function syncHidden(){ hidden.value = (sel.size===0 || sel.size===STATUS_OPTIONS.length) ? '' : [...sel].join('|'); }
   function open(){ menu.hidden=false; document.addEventListener('click', onDocClick); }
@@ -592,14 +585,14 @@ const STATUS_OPTIONS = ['Not Started','In Progress','Waiting Client','On Hold','
 /* =========================
    Select-all & Bulk delete
    ========================= */
-el('selectAll').addEventListener('change', (e)=>{
+onId('selectAll','change', (e)=>{
   const rows = $$('#taskTbody tr');
   const ids = rows.map(r=>r.dataset.id);
   if(e.target.checked){ ids.forEach(id=>selectedIds.add(id)); }
   else { ids.forEach(id=>selectedIds.delete(id)); }
   render();
 });
-el('bulkDeleteBtn').addEventListener('click', bulkDelete);
+onId('bulkDeleteBtn','click', bulkDelete);
 
 /* =========================
    Init
@@ -612,7 +605,6 @@ function migrate(){
 }
 load(); migrate();
 // No auto-seed in production to avoid overwriting cloud state.
-// (If you want demo data only on localhost, you could gate it.)
 // if (location.hostname === 'localhost' && tasks.length===0) seedDemo();
 ensureRecurringInstances(); render();
 try{ refreshTitleOptions(); refreshClientOptions(); }catch(e){}
@@ -621,16 +613,15 @@ try{ refreshTitleOptions(); refreshClientOptions(); }catch(e){}
    CREATE INVOICE FEATURE
    ========================= */
 const invoiceModal = el('invoiceModal');
-el('createInvoiceBtn').addEventListener('click', ()=>{
-  openInvoiceModal(); autoPopulateInvoiceMeta();
-});
-el('invoiceCancelBtn').addEventListener('click', ()=> invoiceModal.classList.remove('active'));
-invoiceModal.addEventListener('click', e=>{ if(e.target===invoiceModal) invoiceModal.classList.remove('active'); });
-function openInvoiceModal(){ el('invoiceModalTitle').textContent='Create Invoice'; invoiceModal.classList.add('active'); setTimeout(()=>el('invClient').focus(),10); }
+onId('createInvoiceBtn','click', ()=>{ openInvoiceModal(); autoPopulateInvoiceMeta(); });
+onId('invoiceCancelBtn','click', ()=> invoiceModal && invoiceModal.classList.remove('active'));
+if (invoiceModal) invoiceModal.addEventListener('click', e=>{ if(e.target===invoiceModal) invoiceModal.classList.remove('active'); });
+function openInvoiceModal(){ el('invoiceModalTitle') && (el('invoiceModalTitle').textContent='Create Invoice'); invoiceModal && invoiceModal.classList.add('active'); setTimeout(()=>el('invClient')&&el('invClient').focus(),10); }
 
 const serviceRows = el('serviceRows');
-el('addServiceRowBtn').addEventListener('click', addServiceRow);
+onId('addServiceRowBtn','click', addServiceRow);
 function addServiceRow(desc='', amt=''){
+  if(!serviceRows) return;
   const idx = serviceRows.children.length + 1;
   const row = document.createElement('div');
   row.className='inv-row';
@@ -663,21 +654,22 @@ function nextInvoiceSequence(){
 }
 function formatInvoiceNumber(prefix, fy, seq){ return `${prefix}/${fy}/${String(seq).padStart(3,'0')}`; }
 function autoPopulateInvoiceMeta(){
-  el('invDate').value = todayStr();
+  el('invDate') && (el('invDate').value = todayStr());
   const { fy, seq } = nextInvoiceSequence();
-  el('invNumber').value = formatInvoiceNumber('INSIGHT', fy, seq);
-  serviceRows.innerHTML = ''; addServiceRow('', '');
-  el('discountInput').value = 0; recomputeTotals();
+  el('invNumber') && (el('invNumber').value = formatInvoiceNumber('INSIGHT', fy, seq));
+  if (serviceRows){ serviceRows.innerHTML = ''; addServiceRow('', ''); }
+  el('discountInput') && (el('discountInput').value = 0); recomputeTotals();
 }
-el('discountInput').addEventListener('input', recomputeTotals);
+onId('discountInput','input', recomputeTotals);
 function recomputeTotals(){
+  if(!serviceRows) return;
   const amts = $$('.svc-amt', serviceRows).map(i=>Number(i.value||0));
   const sub = amts.reduce((s,n)=>s+n,0);
-  const disc = Number(el('discountInput').value||0);
+  const disc = Number(el('discountInput')?.value||0);
   const grand = Math.max(sub - disc, 0);
-  el('subTotal').textContent = fmtMoney(sub);
-  el('grandTotal').textContent = fmtMoney(grand);
-  el('amountWords').textContent = toIndianWords(Math.round(grand)) + ' only';
+  el('subTotal') && (el('subTotal').textContent = fmtMoney(sub));
+  el('grandTotal') && (el('grandTotal').textContent = fmtMoney(grand));
+  el('amountWords') && (el('amountWords').textContent = toIndianWords(Math.round(grand)) + ' only');
 }
 function toIndianWords(num){
   if(num===0) return 'Zero Rupees';
@@ -695,60 +687,52 @@ function toIndianWords(num){
   if(hundred) out += `${three(hundred)}`;
   return (out.trim() || 'Zero') + ' Rupees';
 }
-el('downloadPdfBtn').addEventListener('click', async ()=>{
+onId('downloadPdfBtn','click', async ()=>{
   bindInvoicePreview();
   const page = document.querySelector('.a4'),
         holder = el('invoiceA4');
-  
-  // Show for capture
+  if(!page || !holder) return;
   holder.style.visibility = 'visible';
   holder.style.left = '0';
   holder.style.top = '0';
   holder.style.position = 'fixed';
 
-  // Use lower but sharp scale (around 2 is enough for print clarity)
-  const scale = 2;  
+  const scale = 2;
   const canvas = await html2canvas(page, {
     scale,
     useCORS: true,
     backgroundColor: '#FFFFFF',
     logging: false
   });
-
-  // ✅ Export as JPEG with 0.85 quality (instead of PNG)
   const imgData = canvas.toDataURL('image/jpeg', 0.85);
 
   const pdf = new jspdf.jsPDF('p','mm','a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const imgWidth = pageWidth;
   const imgHeight = canvas.height * imgWidth / canvas.width;
-
-  // Insert JPEG instead of PNG
   pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
 
-  const name = `${(el('invNumber').value||'Invoice').replace(/[^\w\-]+/g,'_')}.pdf`;
+  const name = `${(el('invNumber')?.value||'Invoice').replace(/[^\w\-]+/g,'_')}.pdf`;
   pdf.save(name);
 
-  // Hide again
   holder.style.visibility = 'hidden';
   holder.style.left = '-9999px';
   holder.style.top = '-9999px';
 });
 
 function bindInvoicePreview(){
-  const ddmmyyyy = fmtDateDDMMYYYY(el('invDate').value);
-  $$('[data-bind="invNumber"]').forEach(elm => elm.textContent = el('invNumber').value || '');
+  const ddmmyyyy = fmtDateDDMMYYYY(el('invDate')?.value);
+  $$('[data-bind="invNumber"]').forEach(elm => elm.textContent = el('invNumber')?.value || '');
   $$('[data-bind="invDateDDMM"]').forEach(elm => elm.textContent = ddmmyyyy || '');
-  $$('[data-bind="client"]').forEach(elm => elm.textContent = el('invClient').value || '');
-  $$('[data-bind="address"]').forEach(elm => elm.textContent = el('invAddress').value || '');
-  $$('[data-bind="email"]').forEach(elm => elm.textContent = el('invEmail').value || '');
-  $$('[data-bind="mobile"]').forEach(elm => elm.textContent = el('invMobile').value || '');
-  $$('[data-bind="subTotal"]').forEach(elm => elm.textContent = el('subTotal').textContent || '0');
-  $$('[data-bind="discount"]').forEach(elm => elm.textContent = fmtMoney(Number(el('discountInput').value||0)));
-  $$('[data-bind="grandTotal"]').forEach(elm => elm.textContent = el('grandTotal').textContent || '0');
-  $$('[data-bind="amountWords"]').forEach(elm => elm.textContent = el('amountWords').textContent || '');
-  const tbody = document.querySelector('[data-bind="rows"]'); tbody.innerHTML = '';
-  $$('.inv-row', serviceRows).forEach((r,i)=>{
+  $$('[data-bind="client"]').forEach(elm => elm.textContent = el('invClient')?.value || '');
+  $$('[data-bind="address"]').forEach(elm => elm.textContent = el('invAddress')?.value || '');
+  $$('[data-bind="email"]').forEach(elm => elm.textContent = el('invEmail')?.value || '');
+  $$('[data-bind="mobile"]').forEach(elm => elm.textContent = el('invMobile')?.value || '');
+  $$('[data-bind="subTotal"]').forEach(elm => elm.textContent = el('subTotal')?.textContent || '0');
+  $$('[data-bind="discount"]').forEach(elm => elm.textContent = fmtMoney(Number(el('discountInput')?.value||0)));
+  $$('[data-bind="grandTotal"]').forEach(elm => elm.textContent = el('grandTotal')?.textContent || '0');
+  const tbody = document.querySelector('[data-bind="rows"]'); if(!tbody) return; tbody.innerHTML = '';
+  $$('.inv-row', serviceRows||document.createElement('div')).forEach((r,i)=>{
     const desc = r.querySelector('.svc-desc').value.trim();
     const amt  = Number(r.querySelector('.svc-amt').value||0);
     if(!desc && !amt) return;
@@ -762,30 +746,31 @@ function bindInvoicePreview(){
    EDIT INVOICE (Upload PDF)
    ========================= */
 const editModal = el('editInvoiceModal');
-el('openEditInvoiceBtn').addEventListener('click', ()=>{ openEditInvoiceModal(); });
-el('editCancelBtn').addEventListener('click', ()=> editModal.classList.remove('active'));
-editModal.addEventListener('click', e=>{ if(e.target===editModal) editModal.classList.remove('active'); });
+onId('openEditInvoiceBtn','click', ()=>{ openEditInvoiceModal(); });
+onId('editCancelBtn','click', ()=> editModal && editModal.classList.remove('active'));
+if (editModal) editModal.addEventListener('click', e=>{ if(e.target===editModal) editModal.classList.remove('active'); });
 
 function openEditInvoiceModal(){
-  el('parseLog').innerHTML = 'Select or drop a PDF generated by this app.';
-  el('pdfInput').value = '';
-  editModal.classList.add('active');
-  // Show current library diagnostics
+  el('parseLog') && (el('parseLog').innerHTML = 'Select or drop a PDF generated by this app.');
+  el('pdfInput') && (el('pdfInput').value = '');
+  editModal && editModal.classList.add('active');
   reportDebugInfo();
 }
 const drop = el('pdfDrop');
-drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('hover'); });
-drop.addEventListener('dragleave', ()=> drop.classList.remove('hover'));
-drop.addEventListener('drop', e=>{
-  e.preventDefault(); drop.classList.remove('hover');
-  const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) handlePdfFile(f);
-});
-el('pdfInput').addEventListener('change', e=>{
+if (drop){
+  drop.addEventListener('dragover', e=>{ e.preventDefault(); drop.classList.add('hover'); });
+  drop.addEventListener('dragleave', ()=> drop.classList.remove('hover'));
+  drop.addEventListener('drop', e=>{
+    e.preventDefault(); drop.classList.remove('hover');
+    const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) handlePdfFile(f);
+  });
+}
+onId('pdfInput','change', e=>{
   const f = e.currentTarget.files && e.currentTarget.files[0]; if(f) handlePdfFile(f);
 });
 
 /* Debug toggle button */
-el('debugToggleBtn').addEventListener('click', ()=>{
+onId('debugToggleBtn','click', ()=>{
   if (localStorage.getItem('__DEBUG')) { localStorage.removeItem('__DEBUG'); }
   else { localStorage.setItem('__DEBUG','1'); }
   alert('Debug is now ' + (localStorage.getItem('__DEBUG') ? 'ON' : 'OFF') + '. Reload to apply.');
@@ -802,38 +787,26 @@ async function handlePdfFile(file){
   function ok(msg){ pushStep(steps, `✅ ${msg}`); }
 
   try{
-    // 0) Basic lib checks
     if (!window.pdfjsLib){ fail('E_NO_LIB_PDFJS', null, 'pdf.js not loaded'); return; }
     ok('pdf.js present');
 
     if (!window.__pdfWorkerSet){
-      // If file:// protocol, workers are commonly blocked
       const advice = (location.protocol === 'file:') ? 'Worker likely blocked on file:// — serve via http:// (e.g., VSCode Live Server).' : 'Worker not set — check network.';
       fail('E_WORKER_NOT_SET', null, advice);
-      // we still try; pdf.js can fall back in some environments
-    } else {
-      ok('pdf.js worker configured');
-    }
+    } else { ok('pdf.js worker configured'); }
 
     if (!window.Tesseract){ fail('E_NO_LIB_TESSERACT', null, 'tesseract.js not loaded (OCR fallback unavailable)'); }
     else ok('tesseract.js present');
 
-    // 1) Read file buffer
     ok('Reading file (ArrayBuffer)…');
     const buf = await file.arrayBuffer();
 
-    // 2) Open PDF
     ok('Opening PDF with pdf.js…');
     let pdf;
-    try{
-      pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    }catch(openErr){
-      fail('E_PDF_OPEN', openErr, 'Could not open PDF — ensure it is a valid PDF file');
-      return;
-    }
+    try{ pdf = await pdfjsLib.getDocument({ data: buf }).promise; }
+    catch(openErr){ fail('E_PDF_OPEN', openErr, 'Could not open PDF — ensure it is a valid PDF file'); return; }
     ok(`PDF opened (${pdf.numPages} page(s))`);
 
-    // 3) Extract text from all pages
     let textAll = '';
     for (let p = 1; p <= pdf.numPages; p++){
       const page = await pdf.getPage(p);
@@ -845,12 +818,7 @@ async function handlePdfFile(file){
       ok('Embedded text found via pdf.js');
     } else {
       pushStep(steps, 'ℹ️ No embedded text found — attempting OCR…');
-
-      // 4) OCR the first page (image-only PDFs)
-      if (!window.Tesseract){
-        fail('E_NO_TEXT_NO_OCR', null, 'No text & OCR lib missing — cannot parse');
-        return;
-      }
+      if (!window.Tesseract){ fail('E_NO_TEXT_NO_OCR', null, 'No text & OCR lib missing — cannot parse'); return; }
       const page1 = await pdf.getPage(1);
       const viewport = page1.getViewport({ scale: 2.6 });
       const canvas = document.createElement('canvas');
@@ -861,41 +829,30 @@ async function handlePdfFile(file){
         await page1.render({ canvasContext: ctx, viewport }).promise;
         ok('Rendered page 1 to canvas for OCR');
       } catch(rendErr){
-        fail('E_RENDER_PAGE', rendErr, 'Could not render page for OCR');
-        return;
+        fail('E_RENDER_PAGE', rendErr, 'Could not render page for OCR'); return;
       }
-
       try{
         const res = await Tesseract.recognize(canvas, 'eng', { logger: (m)=>{ if(DEBUG) dlog('OCR', m); } });
         textAll = (res && res.data && res.data.text || '').replace(/\r/g,'').trim();
-        if (textAll) ok('OCR text extracted');
-        else { fail('E_OCR_EMPTY', null, 'OCR produced empty text'); return; }
-      }catch(ocrErr){
-        fail('E_OCR_FAIL', ocrErr, 'tesseract.js error');
-        return;
-      }
+        if (textAll) ok('OCR text extracted'); else { fail('E_OCR_EMPTY', null, 'OCR produced empty text'); return; }
+      }catch(ocrErr){ fail('E_OCR_FAIL', ocrErr, 'tesseract.js error'); return; }
     }
 
-    // 5) Parse invoice text
     ok('Parsing invoice text…');
     const parsed = parseInvoiceText(textAll);
     if (!parsed || (!parsed.invNo && !parsed.name && (!parsed.services || !parsed.services.length))){
-      fail('E_PARSE_EMPTY', null, 'Parser did not find expected fields');
-      return;
+      fail('E_PARSE_EMPTY', null, 'Parser did not find expected fields'); return;
     }
     ok('Parser produced fields');
 
-    // 6) Apply to form
     ok('Applying fields to Create Invoice form…');
     applyParsedToForm(parsed);
     recomputeTotals();
     bindInvoicePreview();
     ok('Done — form populated');
-    setTimeout(()=> editModal.classList.remove('active'), 900);
+    setTimeout(()=> editModal && editModal.classList.remove('active'), 900);
 
-  }catch(err){
-    fail('E_UNCAUGHT', err, 'Unexpected error (see console)');
-  }
+  }catch(err){ fail('E_UNCAUGHT', err, 'Unexpected error (see console)'); }
 }
 
 /* ============ Parser tailored to our invoice layout ============ */
@@ -910,11 +867,9 @@ function parseInvoiceText(txt){
     return (m[1]||'').replace(/[₹\s,]/g,'').trim();
   }
 
-  // Invoice meta
   const invNo = pick(/Invoice\s*No:\s*([^\n]+)/i);
   const invDateDD = pick(/Invoice\s*Date:\s*([0-9]{2}\/[0-9]{2}\/[0-9]{4})/i);
 
-  // Receiver block
   const recvBlock = (() => {
     const start = T.search(/Detail\s+of\s+Receiver/i);
     if (start < 0) return '';
@@ -922,20 +877,17 @@ function parseInvoiceText(txt){
     return end>start ? T.slice(start, end) : T.slice(start);
   })();
 
-  // Client Name
   let name = pick(/Name:\s*([^\n]+)/i, recvBlock)
                .replace(/\bInvoice\s*Amount.*$/i,'')
                .replace(/₹.*$/,'')
                .replace(/\d[\d,]*(\.\d{1,2})?$/,'')
                .trim();
 
-  // Email
   let emailRaw = pick(/E-?mail:\s*([^\n]+)/i, recvBlock);
   let email = '';
   const emailMatch = emailRaw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
   if (emailMatch) email = emailMatch[0].trim();
 
-  // Mobile
   let mobileLine = pick(/Mobile\s*No:\s*([^\n]+)/i, recvBlock);
   let mobile = '';
   if (mobileLine){
@@ -944,13 +896,11 @@ function parseInvoiceText(txt){
     mobile = (digitCount >= 7) ? cleaned : '';
   }
 
-  // Address
   const address = (() => {
     const m = recvBlock.match(/Address:\s*([\s\S]*?)(?:E-?mail:|Mobile\s*No:|$)/i);
     return m ? m[1].replace(/\n+/g,' ').trim() : '';
   })();
 
-  // Service Rows
   const rowsBlock = (() => {
     const start = T.search(/Service\s*Description/i);
     const end = T.search(/Sub\s*Total/i);
@@ -961,7 +911,6 @@ function parseInvoiceText(txt){
   if (rowsBlock){
     const lines = rowsBlock.split('\n').map(l=>l.trim()).filter(Boolean);
     for (const line of lines){
-      // Ignore headers
       if (/^S\.\s*No/i.test(line) || /^Service\s*Description/i.test(line) || /^Amount/i.test(line)) continue;
       const m = line.match(new RegExp(`^(\\d+)?\\s*([^₹\\d]+)\\s*(₹?\\s*${DIGITS.source})$`));
       if (m){
@@ -972,12 +921,10 @@ function parseInvoiceText(txt){
     }
   }
 
-  // Totals
   const subTotalNum   = pickMoneyAfter('Sub\\s*Total');
   const discountNum   = pickMoneyAfter('Less:\\s*Discount');
   const invoiceAmtNum = pickMoneyAfter('Invoice\\s*Amount');
 
-  // 🔍 Debug overlay injection
   const debugInfo = document.getElementById("debugInfo");
   if (debugInfo){
     debugInfo.textContent =
@@ -1000,18 +947,18 @@ function parseInvoiceText(txt){
 function applyParsedToForm(p){
   if(p.invNo) el('invNumber').value = p.invNo;
   if(p.invDateISO) el('invDate').value = p.invDateISO;
-
-  // Only set values if present (blank stays blank)
   if(typeof p.name === 'string')   el('invClient').value = p.name;
   if(typeof p.email === 'string')  el('invEmail').value  = p.email;
   if(typeof p.mobile === 'string') el('invMobile').value = p.mobile;
   if(typeof p.address === 'string')el('invAddress').value= p.address;
 
   if(Array.isArray(p.services) && p.services.length){
-    serviceRows.innerHTML = '';
-    p.services.forEach(s => addServiceRow(s.desc || '', String(s.amt || '')));
+    if (serviceRows) {
+      serviceRows.innerHTML = '';
+      p.services.forEach(s => addServiceRow(s.desc || '', String(s.amt || '')));
+    }
   }
-  if(Number.isFinite(p.discount)) el('discountInput').value = p.discount;
+  if(Number.isFinite(p.discount)) el('discountInput') && (el('discountInput').value = p.discount);
 }
 
 /* =========================
