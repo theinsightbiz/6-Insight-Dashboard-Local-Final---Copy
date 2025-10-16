@@ -168,13 +168,13 @@ function toggleClientCustom(val){
 
 /* ---------- Firebase Config (your real keys) ---------- */
 const firebaseConfig = {
-  apiKey: "AIzaSyCpBJUNBB-ncgcDwq6CjDqkjkaSp4Gky-w",
-  authDomain: "sanjeevsriram-1b0e4.firebaseapp.com",
-  projectId: "sanjeevsriram-1b0e4",
-  storageBucket: "sanjeevsriram-1b0e4.firebasestorage.app",
-  messagingSenderId: "265405165493",
-  appId: "1:265405165493:web:f23b52369f0920dfd533fc",
-  measurementId: "G-92M9Z1L7W3"
+  apiKey: "AIzaSyCPrXLTK0klLUxWtC5XGLqUFDQXawllkzo",
+  authDomain: "ssrdashboard.firebaseapp.com",
+  projectId: "ssrdashboard",
+  storageBucket: "ssrdashboard.firebasestorage.app",
+  messagingSenderId: "677899078007",
+  appId: "1:677899078007:web:80e9cbf3b71aeaf149f972",
+  measurementId: "G-7RJ6VMTG4R"
 };
 if (typeof firebase === 'undefined') {
   console.error('Firebase SDK not loaded. Ensure compat scripts are before script.js.');
@@ -183,7 +183,7 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
 /* ---------- Workspace ---------- */
-const WORKSPACE = 'insight-dashboard-1408';
+const WORKSPACE = 'ssrdashboard';
 const tasksRef = rtdb.ref(`workspaces/${WORKSPACE}/tasks`);
 const skipsRef = rtdb.ref(`workspaces/${WORKSPACE}/skips`);
 
