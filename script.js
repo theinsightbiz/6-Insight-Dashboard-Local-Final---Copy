@@ -170,7 +170,7 @@ function toggleClientCustom(val){
 const firebaseConfig = {
   apiKey: "AIzaSyCPrXLTK0klLUxWtC5XGLqUFDQXawllkzo",
   authDomain: "ssrdashboard.firebaseapp.com",
-  databaseURL:   "https://ssrdashboard-default-rtdb.firebaseio.com",
+  databaseURL: "https://ssrdashboard-default-rtdb.firebaseio.com",
   projectId: "ssrdashboard",
   storageBucket: "ssrdashboard.firebasestorage.app",
   messagingSenderId: "677899078007",
