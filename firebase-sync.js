@@ -10,11 +10,13 @@ import {
 
 /* 1) Paste your Firebase config here (from Console → Project settings → Web app) */
 const firebaseConfig = {
-  apiKey:        "AIzaSyCpBJUNBB-ncgcDwq6CjDqkjkaSp4Gky-w",
-  authDomain:    "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:     "YOUR_PROJECT_ID",
-  appId:         "YOUR_APP_ID",
-  // storageBucket / measurementId optional
+  apiKey: "AIzaSyCpBJUNBB-ncgcDwq6CjDqkjkaSp4Gky-w",
+  authDomain: "sanjeevsriram-1b0e4.firebaseapp.com",
+  projectId: "sanjeevsriram-1b0e4",
+  storageBucket: "sanjeevsriram-1b0e4.firebasestorage.app",
+  messagingSenderId: "265405165493",
+  appId: "1:265405165493:web:f23b52369f0920dfd533fc",
+  measurementId: "G-92M9Z1L7W3"
 };
 
 /* 2) Initialize */
