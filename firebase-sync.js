@@ -1,4 +1,4 @@
-// firebase-sync.js — hardened Auth + Firestore mirror with safe first-sync & logging
+// firebase-sync.js — Firestore two-way sync (robust first-pull + strict auth + visibility logs)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, GoogleAuthProvider,
@@ -25,18 +25,20 @@ const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// Optional offline cache (warning in console about deprecation is harmless)
-try { await enableIndexedDbPersistence(db); } catch(e) {
-  console.warn('[firebase-sync] persistence not enabled:', e?.message || e);
-}
+// Optional cache (warning about deprecation is harmless)
+try { await enableIndexedDbPersistence(db); } catch(e) { console.warn('[sync] persistence off:', e?.message || e); }
 
-// --- UI hooks
+// --- Minimal UI hooks
 const $ = (id)=>document.getElementById(id);
 const signinBtn  = $('signinBtn');
 const signoutBtn = $('signoutBtn');
 const userBadge  = $('userBadge');
+let userUidSpan  = document.getElementById('userUid');
+let taskCountSpan= document.getElementById('taskCount');
+if (!userUidSpan)  { userUidSpan  = document.createElement('span'); userUidSpan.id='userUid';  userUidSpan.style.marginLeft='.5rem'; userUidSpan.style.opacity='.6'; document.querySelector('header .actions')?.appendChild(userUidSpan); }
+if (!taskCountSpan){ taskCountSpan= document.createElement('span'); taskCountSpan.id='taskCount';taskCountSpan.style.marginLeft='.5rem'; taskCountSpan.style.opacity='.6'; document.querySelector('header .actions')?.appendChild(taskCountSpan); }
 
-// --- State
+// --- Local state
 const LS_KEY = 'ca-dashboard-tasks-v1';
 const PATH   = (uid)=> `users/${uid}/state`;
 const DOC_ID = 'app_v1';
@@ -45,13 +47,29 @@ let isApplyingRemote = false;
 let lastAppliedRemoteAt = 0;
 let unsubscribeCloud = null;
 
-// --- Utils
+// Helpers
 function readLocal(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch{ return []; } }
 function writeLocal(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr??[])); }
 function debounce(fn, ms=450){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 const pushToCloudDebounced = debounce(pushToCloud, 650);
 
-// Shim save() so every local change mirrors to cloud once authenticated
+function setHdr(uid, n){
+  if (userBadge) userBadge.textContent = uid ? `Signed in as ${auth.currentUser?.displayName || auth.currentUser?.email || uid}` : '';
+  if (userUidSpan)  userUidSpan.textContent   = uid ? `(uid: ${uid})` : '';
+  if (taskCountSpan) taskCountSpan.textContent = Number.isFinite(n) ? `| tasks: ${n}` : '';
+}
+function adoptRemote(tasks){
+  writeLocal(tasks ?? []);
+  lastAppliedRemoteAt = Date.now();
+  try{
+    if (window.ensureRecurringInstances) window.ensureRecurringInstances();
+    if (window.render) window.render();
+  }catch(e){ console.error('[sync] render error:', e); }
+  setHdr(auth.currentUser?.uid, Array.isArray(tasks)?tasks.length:0);
+  console.log('[sync] adopted cloud → local;', { uid: auth.currentUser?.uid, count: (tasks||[]).length });
+}
+
+// Shim save() so every edit mirrors to cloud after auth
 (function shimSave(){
   const original = window.save;
   window.save = function patchedSave(){
@@ -60,62 +78,57 @@ const pushToCloudDebounced = debounce(pushToCloud, 650);
   };
 })();
 
+// Local ➜ Cloud
 async function pushToCloud(uid){
-  if(!uid) return;                        // never write without auth
+  if(!uid) return;                         // never write without auth
   const tasks = readLocal();
   const ref = doc(db, PATH(uid), DOC_ID);
   await setDoc(ref, { tasks, updatedAt: serverTimestamp() }, { merge: true });
 }
 
-function adoptRemote(tasks){
-  writeLocal(tasks);
-  lastAppliedRemoteAt = Date.now();
-  try{
-    if (window.ensureRecurringInstances) window.ensureRecurringInstances();
-    if (window.render) window.render();
-  }catch(e){ console.error(e); }
-  console.log('[firebase-sync] adopted cloud → local, tasks:', tasks.length);
-}
-
+// One-time strong pull from cloud, then live listener
 async function startCloudSubscription(user){
-  if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud=null; }
+  if (unsubscribeCloud) { unsubscribeCloud(); unsubscribeCloud = null; }
 
-  // UI reflect auth
   if(!user){
-    if(signinBtn)  signinBtn.style.display = '';
-    if(signoutBtn) signoutBtn.style.display = 'none';
-    if(userBadge)  userBadge.textContent   = '';
-    console.log('[firebase-sync] signed out; not touching Firestore.');
+    if (signinBtn)  signinBtn.style.display  = '';
+    if (signoutBtn) signoutBtn.style.display = 'none';
+    setHdr('', undefined);
+    console.log('[sync] signed out — not touching Firestore.');
     return;
   }
-  if(signinBtn)  signinBtn.style.display = 'none';
-  if(signoutBtn) signoutBtn.style.display = '';
-  if(userBadge)  userBadge.textContent   = `Signed in as ${user.displayName || user.email || user.uid}`;
 
-  const uid = user.uid;
-  console.log('[firebase-sync] auth state:', uid);
+  if (signinBtn)  signinBtn.style.display  = 'none';
+  if (signoutBtn) signoutBtn.style.display = '';
+  setHdr(user.uid, undefined);
+  console.log('[sync] auth state:', user.uid, 'path:', `${PATH(user.uid)}/${DOC_ID}`);
 
-  const ref = doc(db, PATH(uid), DOC_ID);
+  const ref = doc(db, PATH(user.uid), DOC_ID);
 
-  // FIRST SYNC: prefer cloud if it has data; otherwise seed from local
-  try{
+  try {
+    // ---------- FIRST PULL (blocking) ----------
     const snap = await getDoc(ref);
-    if(!snap.exists()){
+
+    if (!snap.exists()) {
       const local = readLocal();
-      await setDoc(ref, { tasks: Array.isArray(local)?local:[], updatedAt: serverTimestamp() }, { merge: true });
-      console.log('[firebase-sync] no cloud doc; seeded from local:', local.length);
-    }else{
+      await setDoc(ref, { tasks: Array.isArray(local) ? local : [], updatedAt: serverTimestamp() }, { merge: true });
+      console.log('[sync] cloud was empty; seeded from local:', local.length);
+      adoptRemote(local);
+    } else {
       const data = snap.data() || {};
       const remoteTasks = Array.isArray(data.tasks) ? data.tasks : [];
+
+      // Never let empty-local overwrite non-empty cloud
       if (remoteTasks.length === 0 && Array.isArray(readLocal()) && readLocal().length > 0) {
         await setDoc(ref, { tasks: readLocal(), updatedAt: serverTimestamp() }, { merge: true });
-        console.log('[firebase-sync] cloud empty; pushed local → cloud:', readLocal().length);
+        console.log('[sync] cloud empty; pushed local → cloud:', readLocal().length);
+        adoptRemote(readLocal());
       } else {
-        adoptRemote(remoteTasks);
+        adoptRemote(remoteTasks);         // <-- ensures Incognito shows data immediately
       }
     }
 
-    // Live updates
+    // ---------- LIVE LISTENER ----------
     unsubscribeCloud = onSnapshot(ref, (docSnap)=>{
       if(!docSnap.exists()) return;
       const data = docSnap.data() || {};
@@ -125,13 +138,13 @@ async function startCloudSubscription(user){
       adoptRemote(remoteTasks);
       isApplyingRemote = false;
     }, (err)=>{
-      console.error('[firebase-sync] onSnapshot error:', err?.code, err?.message);
+      console.error('[sync] onSnapshot error:', err?.code, err?.message);
     });
 
-  }catch(err){
-    console.error('[firebase-sync] first-sync error:', err?.code, err?.message);
+  } catch (err) {
+    console.error('[sync] first-sync error:', err?.code, err?.message);
     if (String(err?.message||'').includes('Missing or insufficient permissions')) {
-      console.warn('→ Check Firestore **Rules published**, and Auth → **Authorized domains** includes your Netlify domain.');
+      alert('Firestore blocked by rules: ensure Rules are PUBLISHED and you are signed in. See Console for details.');
     }
   }
 }
@@ -140,19 +153,19 @@ async function startCloudSubscription(user){
 if (signinBtn) signinBtn.addEventListener('click', async ()=>{
   try { await signInWithPopup(auth, new GoogleAuthProvider()); }
   catch (e) {
-    console.warn('[firebase-sync] popup failed; redirecting:', e?.code, e?.message);
+    console.warn('[sync] popup failed; redirecting:', e?.code, e?.message);
     try { await signInWithRedirect(auth, new GoogleAuthProvider()); }
-    catch (err) { console.error('[firebase-sync] redirect error:', err?.code, err?.message); alert('Sign-in failed. See Console.'); }
+    catch (err) { console.error('[sync] redirect error:', err?.code, err?.message); alert('Sign-in failed. See Console.'); }
   }
 });
 if (signoutBtn) signoutBtn.addEventListener('click', ()=> signOut(auth));
 
 try { await getRedirectResult(auth); } catch(e) {
-  console.warn('[firebase-sync] getRedirectResult:', e?.code, e?.message);
+  console.warn('[sync] getRedirectResult:', e?.code, e?.message);
   if (e?.code === 'auth/unauthorized-domain') alert('This domain is not authorized in Firebase Auth settings.');
 }
 
-// Drive the flow only from authenticated state
+// Drive only from auth state
 onAuthStateChanged(auth, (user)=> startCloudSubscription(user));
 
 // Hooks used by the save() shim
