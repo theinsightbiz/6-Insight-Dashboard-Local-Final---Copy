@@ -72,7 +72,11 @@ function load(){
   try{ tasks = JSON.parse(localStorage.getItem(KEY)) || []; } catch{ tasks = []; }
   try{ skips = JSON.parse(localStorage.getItem(SKIP_KEY)) || []; } catch{ skips = []; }
 }
-function save(){ localStorage.setItem(KEY, JSON.stringify(tasks)); }
+function save(){
+  localStorage.setItem(KEY, JSON.stringify(tasks));
+  // notify Firebase sync (defined by firebase-sync.js)
+  if (window.__cloudSync_notifyLocalChanged) window.__cloudSync_notifyLocalChanged();
+}
 function saveSkips(){ localStorage.setItem(SKIP_KEY, JSON.stringify(skips)); }
 function isSkipped(recurringId, period){ return !!skips.find(s=>s.recurringId===recurringId && s.period===period); }
 function addSkip(recurringId, period){ if(recurringId && period && !isSkipped(recurringId, period)){ skips.push({recurringId, period}); saveSkips(); } }
@@ -607,7 +611,10 @@ function migrate(){
   }
 }
 load(); migrate();
-if(tasks.length===0) seedDemo(); else { ensureRecurringInstances(); render(); }
+// No auto-seed in production to avoid overwriting cloud state.
+// (If you want demo data only on localhost, you could gate it.)
+// if (location.hostname === 'localhost' && tasks.length===0) seedDemo();
+ensureRecurringInstances(); render();
 try{ refreshTitleOptions(); refreshClientOptions(); }catch(e){}
 
 /* =========================

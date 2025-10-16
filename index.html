@@ -54,6 +54,10 @@
         <button class="btn icon" id="createInvoiceBtn" aria-haspopup="dialog">🧾 Create Invoice</button>
         <button class="btn icon ghost" id="bulkDeleteBtn" title="Delete selected">🗑️ Bulk Delete</button>
         <button class="btn icon ghost" id="exportCsvBtn">⬇️ Export CSV</button>
+        <!-- Auth UI -->
+        <button class="btn icon" id="signinBtn">🔐 Sign in</button>
+        <button class="btn icon ghost" id="signoutBtn" style="display:none">↩︎ Sign out</button>
+        <span id="userBadge" style="margin-left:.5rem; font-size:0.9rem; opacity:.8"></span>
       </div>
     </header>
 
@@ -360,6 +364,10 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <!-- Your existing main bundle -->
+<script src="script.js"></script>
+
+<!-- Firebase sync module -->
+<script type="module" src="firebase-sync.js"></script>
 </body>
 </html>
