@@ -101,20 +101,24 @@
         </select>
       </div>
       <div class="field">
-        <select class="select" id="sortBy" aria-label="Sort by">
-          <option value="deadline">Sort: Deadline</option>
-          <option value="createdAt">Sort: Created</option>
-          <option value="priority">Sort: Priority</option>
-          <option value="status">Sort: Status</option>
-          <option value="fee">Sort: Fee</option>
-        </select>
+  <!-- hidden input keeps compatibility with existing JS -->
+  <input type="hidden" id="invoiceStatusFilter" value="">
+  <div class="multi" id="invoiceStatusMulti">
+    <button type="button" class="btn icon" id="invoiceStatusMultiBtn">Invoice Status: All</button>
+
+    <div class="menu" id="invoiceStatusMultiMenu" hidden>
+      <label><input type="checkbox" value="Not Raised"> Not Raised</label>
+      <label><input type="checkbox" value="Sent"> Sent</label>
+      <label><input type="checkbox" value="Paid"> Paid</label>
+      <label><input type="checkbox" value="Partially Paid"> Partially Paid</label>
+
+      <div class="menu-actions">
+        <button type="button" class="btn ghost" id="invoiceStatusClearBtn">Clear</button>
+        <button type="button" class="btn primary" id="invoiceStatusApplyBtn">Done</button>
       </div>
-      <div class="field">
-        <select class="select" id="sortDir" aria-label="Sort direction">
-          <option value="asc">Asc</option>
-          <option value="desc">Desc</option>
-        </select>
-      </div>
+    </div>
+  </div>
+</div>
     </div>
 
     <!-- Summary Cards -->

@@ -323,6 +323,8 @@ function render(){
   const pf = $('#priorityFilter')?.value || '';
   const sfRaw = $('#statusFilter')?.value || '';
   const sf = sfRaw ? new Set(sfRaw.split('|')) : null;
+  const isfRaw = $('#invoiceStatusFilter')?.value || '';
+const isf = isfRaw ? new Set(isfRaw.split('|')) : null;
   const af = $('#assigneeFilter')?.value || '';
   const mf = $('#monthFilter')?.value || '';
 
@@ -333,7 +335,8 @@ function render(){
     const matchS = !sf || sf.has(t.status);
     const matchA = !af || t.assignee === af;
     const matchM = !mf || yymm(t.deadline) === mf;
-    return matchQ && matchP && matchS && matchA && matchM;
+    const matchI = !isf || isf.has(t.invoiceStatus || 'Not Raised');
+    return matchQ && matchP && matchS && matchA && matchI && matchM;
   });
 
   const sortBy = $('#sortBy')?.value || 'deadline';
@@ -367,14 +370,18 @@ function render(){
     cb.checked = selectedIds.has(cb.dataset.id);
   }
 
+   // ---- KPIs should reflect the currently filtered list ----
   const now = todayStr();
-  const visible = tasks.filter(t=>!(t.recur && !t.period));
+  const visible = filtered; // filtered already excludes templates and respects all filters
+
   const total = visible.length;
-  const pending = visible.filter(t=>t.status!=='Completed').length;
-  const overdue = visible.filter(t=>t.status!=='Completed' && t.deadline && t.deadline < now).length;
-  const sumFee = visible.reduce((s,t)=>s+Number(t.fee||0),0);
-  const sumAdv = visible.reduce((s,t)=>s+Number(t.advance||0),0);
+  const pending = visible.filter(t => t.status !== 'Completed').length;
+  const overdue = visible.filter(t => t.status !== 'Completed' && t.deadline && t.deadline < now).length;
+
+  const sumFee = visible.reduce((s,t) => s + Number(t.fee || 0), 0);
+  const sumAdv = visible.reduce((s,t) => s + Number(t.advance || 0), 0);
   const sumOut = sumFee - sumAdv;
+
   $('#kpiTotal') && ($('#kpiTotal').textContent = total);
   $('#kpiPending') && ($('#kpiPending').textContent = pending);
   $('#kpiOverdue') && ($('#kpiOverdue').textContent = overdue);
@@ -748,6 +755,49 @@ const STATUS_OPTIONS = ['Not Started','In Progress','Waiting Client','On Hold','
 
   if(hidden?.value){
     hidden.value.split('|').forEach(v=>{ if(STATUS_OPTIONS.includes(v)) sel.add(v); });
+    menu?.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = sel.has(cb.value));
+  }
+  if(btn) updateButtonLabel();
+})();
+
+const INVOICE_STATUS_OPTIONS = ['Not Raised','Sent','Paid','Partially Paid'];
+
+(function initInvoiceStatusMulti(){
+  const hidden = $('#invoiceStatusFilter');
+  const btn = $('#invoiceStatusMultiBtn');
+  const menu = $('#invoiceStatusMultiMenu');
+  const applyBtn = $('#invoiceStatusApplyBtn');
+  const clearBtn = $('#invoiceStatusClearBtn');
+  const sel = new Set();
+
+  function updateButtonLabel(){
+    if(sel.size===0){ btn.textContent = 'Invoice Status: All'; return; }
+    if(sel.size===INVOICE_STATUS_OPTIONS.length){ btn.textContent = 'Invoice Status: All'; return; }
+    btn.textContent = `Invoice Status: ${sel.size} selected`;
+  }
+  function syncHidden(){
+    hidden.value = (sel.size===0 || sel.size===INVOICE_STATUS_OPTIONS.length) ? '' : [...sel].join('|');
+  }
+  function open(){ menu.hidden = false; document.addEventListener('click', onDocClick, { once:false }); }
+  function close(){ menu.hidden = true; document.removeEventListener('click', onDocClick, { once:false }); }
+  function onDocClick(e){
+    if(menu.contains(e.target) || btn.contains(e.target)) return;
+    close();
+  }
+
+  btn?.addEventListener('click', ()=>{ if(menu.hidden) open(); else close(); });
+  menu?.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{ cb.checked ? sel.add(cb.value) : sel.delete(cb.value); });
+  });
+  applyBtn?.addEventListener('click', ()=>{ syncHidden(); updateButtonLabel(); close(); render(); });
+  clearBtn?.addEventListener('click', ()=>{
+    sel.clear();
+    menu.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked=false);
+    syncHidden(); updateButtonLabel(); close(); render();
+  });
+
+  if(hidden?.value){
+    hidden.value.split('|').forEach(v=>{ if(INVOICE_STATUS_OPTIONS.includes(v)) sel.add(v); });
     menu?.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = sel.has(cb.value));
   }
   if(btn) updateButtonLabel();
