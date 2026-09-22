@@ -339,8 +339,8 @@ const isf = isfRaw ? new Set(isfRaw.split('|')) : null;
     return matchQ && matchP && matchS && matchA && matchI && matchM;
   });
 
-  const sortBy = $('#sortBy')?.value || 'deadline';
-  const dir = ($('#sortDir')?.value || 'asc') === 'asc' ? 1 : -1;
+  // const sortBy = $('#sortBy')?.value || 'deadline';
+  // const dir = ($('#sortDir')?.value || 'asc') === 'asc' ? 1 : -1;
   filtered.sort((a,b)=>{
     if (sortBy==='deadline')  return (a.deadline||'').localeCompare(b.deadline||'') * dir;
     if (sortBy==='createdAt') return ((a.createdAt||0)-(b.createdAt||0)) * dir;
