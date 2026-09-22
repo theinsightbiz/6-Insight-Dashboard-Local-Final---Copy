@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="mobile-responsive-fix.css?v=1">
   
   <!-- html2canvas + jsPDF for client-side PDF export -->
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
@@ -135,7 +136,13 @@
     </section>
 
     <!-- Table -->
-    <table class="table" aria-label="Tasks table">
+
+    <div class="mobile-table-hint">
+    ← Swipe sideways to view all task columns →
+    </div>
+
+    <div class="table-scroll">
+      <table class="table" aria-label="Tasks table">
       <colgroup>
         <col class="col-check">
         <col class="col-client">
@@ -167,7 +174,8 @@
         </tr>
       </thead>
       <tbody id="taskTbody"></tbody>
-    </table>
+      </table>
+    </div>
 
     <footer class="note">Your trusted partner for accounting, tax and finance.</footer>
   </div>
