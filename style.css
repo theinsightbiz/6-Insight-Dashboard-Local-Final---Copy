@@ -269,6 +269,32 @@ select optgroup,
 #bulkDeleteBtn:hover { background-color: #d32f2f !important; border-color: #d32f2f !important; }
 #exportCsvBtn:hover { background-color: #e68900 !important; border-color: #e68900 !important; }
 
+/* =====================================================
+   SUSHMIT DASHBOARD BUTTON
+   ===================================================== */
+
+#sushmitDashboardBtn {
+  background-color: #7e57c2;
+  color: white;
+  border-color: #7e57c2;
+}
+
+#sushmitDashboardBtn:hover {
+  background-color: #6d48b5 !important;
+  border-color: #6d48b5 !important;
+}
+
+/* When Sushmit dashboard is open */
+
+#sushmitDashboardBtn.active-client-dashboard {
+  background-color: #5e35b1 !important;
+  border-color: #9575cd !important;
+
+  box-shadow:
+    0 0 0 2px rgba(149, 117, 205, 0.25),
+    0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
 
 /* === Combobox styling (Client/Title) === */
 .combo-wrap{ position:relative; }

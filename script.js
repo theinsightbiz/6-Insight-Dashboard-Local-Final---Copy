@@ -183,16 +183,182 @@ if (typeof firebase === 'undefined') {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
-/* ---------- Workspace ---------- */
+/* =====================================================
+   WORKSPACE / DASHBOARD DATABASE
+   ===================================================== */
+
 const WORKSPACE = 'ssrdashboard';
-const tasksRef = rtdb.ref(`workspaces/${WORKSPACE}/tasks`);
-const skipsRef = rtdb.ref(`workspaces/${WORKSPACE}/skips`);
+
+/*
+  Available dashboards:
+
+  main     = normal firm dashboard
+  sushmit  = dedicated Sushmit dashboard
+*/
+let activeDashboard = 'main';
+
+
+/* -----------------------------------------------------
+   Get Firebase base path for current dashboard
+   ----------------------------------------------------- */
+function getDashboardBasePath() {
+
+  if (activeDashboard === 'sushmit') {
+    return `workspaces/${WORKSPACE}/clientDashboards/sushmit`;
+  }
+
+  return `workspaces/${WORKSPACE}`;
+}
+
+
+/* -----------------------------------------------------
+   Current Firebase references
+   ----------------------------------------------------- */
+let tasksRef = rtdb.ref(
+  `${getDashboardBasePath()}/tasks`
+);
+
+let skipsRef = rtdb.ref(
+  `${getDashboardBasePath()}/skips`
+);
+
+
+/* -----------------------------------------------------
+   Rebuild Firebase references whenever dashboard changes
+   ----------------------------------------------------- */
+function setDashboardRefs() {
+
+  const basePath = getDashboardBasePath();
+
+  tasksRef = rtdb.ref(
+    `${basePath}/tasks`
+  );
+
+  skipsRef = rtdb.ref(
+    `${basePath}/skips`
+  );
+}
+
 
 /* ---------- App State ---------- */
+
 let tasks = [];
 let skips = [];
 let selectedIds = new Set();
 let isListening = false;
+
+/* =====================================================
+   DASHBOARD SWITCHER
+   ===================================================== */
+
+function clearDashboardFilters() {
+
+  const searchInput = document.getElementById('searchInput');
+  const priorityFilter = document.getElementById('priorityFilter');
+  const assigneeFilter = document.getElementById('assigneeFilter');
+  const monthFilter = document.getElementById('monthFilter');
+  const statusFilter = document.getElementById('statusFilter');
+  const invoiceStatusFilter = document.getElementById('invoiceStatusFilter');
+
+  if (searchInput) searchInput.value = '';
+  if (priorityFilter) priorityFilter.value = '';
+  if (assigneeFilter) assigneeFilter.value = '';
+  if (monthFilter) monthFilter.value = '';
+  if (statusFilter) statusFilter.value = '';
+  if (invoiceStatusFilter) invoiceStatusFilter.value = '';
+
+}
+
+
+function updateDashboardUI() {
+
+  const btn = document.getElementById('sushmitDashboardBtn');
+  const label = document.getElementById('dashboardLabel');
+
+  if (activeDashboard === 'sushmit') {
+
+    if (btn) {
+      btn.innerHTML = '← Main Dashboard';
+      btn.classList.add('active-client-dashboard');
+    }
+
+    if (label) {
+      label.innerHTML = '👤 Sushmit • Tasks • Deadlines • Billing';
+    }
+
+  } else {
+
+    if (btn) {
+      btn.innerHTML = '👤 Sushmit';
+      btn.classList.remove('active-client-dashboard');
+    }
+
+    if (label) {
+      label.innerHTML = 'Main Dashboard • Tasks • Deadlines • Billing';
+    }
+  }
+}
+
+
+function switchDashboard(targetDashboard) {
+
+  if (targetDashboard === activeDashboard) {
+    return;
+  }
+
+  /*
+    IMPORTANT:
+    Stop listening to old Firebase database
+  */
+  teardownRealtime();
+
+  /*
+    Switch dashboard
+  */
+  activeDashboard = targetDashboard;
+
+  /*
+    Change tasksRef + skipsRef
+  */
+  setDashboardRefs();
+
+  /*
+    Remove selections/filters from previous dashboard
+  */
+  selectedIds.clear();
+  clearDashboardFilters();
+
+  /*
+    Change header/button
+  */
+  updateDashboardUI();
+
+  /*
+    Start listening to NEW database
+  */
+  startRealtime();
+}
+
+
+/* -----------------------------------------------------
+   Sushmit button
+   ----------------------------------------------------- */
+
+document
+  .getElementById('sushmitDashboardBtn')
+  ?.addEventListener('click', () => {
+
+    if (activeDashboard === 'main') {
+
+      switchDashboard('sushmit');
+
+    } else {
+
+      switchDashboard('main');
+
+    }
+
+  });
 
 /* ---------- Realtime listeners ---------- */
 function startRealtime(){
@@ -268,8 +434,8 @@ async function ensureRecurringInstances() {
       const recurDay = tpl.recurDay || (tpl.deadline ? Number(tpl.deadline.slice(8,10)) : now.getDate());
 
       if (!tpl.recurringId || tpl.recurDay !== recurDay) {
-        updates[`workspaces/${WORKSPACE}/tasks/${tpl.id}/recurringId`] = rid;
-        updates[`workspaces/${WORKSPACE}/tasks/${tpl.id}/recurDay`]    = recurDay;
+        updates[`${getDashboardBasePath()}/tasks/${tpl.id}/recurringId`] = rid;
+        updates[`${getDashboardBasePath()}/tasks/${tpl.id}/recurDay`] = recurDay;
         tpl.recurringId = rid; tpl.recurDay = recurDay;
       }
 
@@ -284,7 +450,7 @@ async function ensureRecurringInstances() {
         const id = `${rid}_${period}`;
         const deadline = makeDateYMD(y, m, recurDay);
 
-        updates[`workspaces/${WORKSPACE}/tasks/${id}`] = {
+        updates[`${getDashboardBasePath()}/tasks/${id}`] = {
           id,
           client: tpl.client,
           title: tpl.title,
@@ -558,6 +724,62 @@ $('#addTaskBtn') && ($('#addTaskBtn').onclick = async ()=>{
       if(tI){ tI.value=''; } if(tH){ tH.value=''; }
       if(cI){ cI.value=''; } if(cH){ cH.value=''; }
     }catch(e){}});
+    /* =====================================================
+   SUSHMIT - AUTO CLIENT NAME
+   ===================================================== */
+
+document
+  .getElementById('addTaskBtn')
+  ?.addEventListener('click', () => {
+
+    setTimeout(() => {
+
+      const clientInput =
+        document.getElementById('fClientNew');
+
+      const clientHidden =
+        document.getElementById('fClient');
+
+      const modalTitle =
+        document.getElementById('taskModalTitle');
+
+
+      /* ------------------------------
+         Sushmit Dashboard
+         ------------------------------ */
+
+      if (activeDashboard === 'sushmit') {
+
+        if (clientInput) {
+          clientInput.value = 'Sushmit';
+          clientInput.readOnly = true;
+        }
+
+        if (clientHidden) {
+          clientHidden.value = 'Sushmit';
+        }
+
+        if (modalTitle) {
+          modalTitle.textContent = 'New Sushmit Task';
+        }
+
+      }
+
+      /* ------------------------------
+         Main Dashboard
+         ------------------------------ */
+
+      else {
+
+        if (clientInput) {
+          clientInput.readOnly = false;
+        }
+
+      }
+
+    }, 0);
+
+  });
 $('#cancelBtn') && ($('#cancelBtn').onclick = closeModal);
 modal && (modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); }));
 
@@ -629,7 +851,14 @@ if (taskForm) {
   taskForm.addEventListener('submit', async (e)=>{
     // Ensure Title & Client from select/new
     const _titleVal = (document.getElementById('fTitleNew')?.value||document.getElementById('fTitle')?.value||'').trim();
-const _clientVal = (document.getElementById('fClientNew')?.value||document.getElementById('fClient')?.value||'').trim();
+const _clientVal =
+  activeDashboard === 'sushmit'
+    ? 'Sushmit'
+    : (
+        document.getElementById('fClientNew')?.value ||
+        document.getElementById('fClient')?.value ||
+        ''
+      ).trim();
 if(!_titleVal){ e.preventDefault(); alert('Please select a Task Title or enter a new one.'); return; }
     if(!_clientVal){ e.preventDefault(); alert('Please select a Client or enter a new one.'); return; }
     e.preventDefault();
@@ -847,6 +1076,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
    ========================= */
 const invoiceModal = el('invoiceModal');
 $('#createInvoiceBtn')?.addEventListener('click', ()=>{ openInvoiceModal(); autoPopulateInvoiceMeta(); });
+/* Auto-fill Sushmit on invoice */
+
+$('#createInvoiceBtn')?.addEventListener('click', () => {
+
+  if (activeDashboard !== 'sushmit') {
+    return;
+  }
+
+  setTimeout(() => {
+
+    const client = document.getElementById('invClient');
+
+    if (client) {
+      client.value = 'Sushmit';
+    }
+
+  }, 0);
+
+});
 $('#invoiceCancelBtn')?.addEventListener('click', ()=> invoiceModal.classList.remove('active'));
 invoiceModal?.addEventListener('click', e=>{ if(e.target===invoiceModal) invoiceModal.classList.remove('active'); });
 function openInvoiceModal(){ $('#invoiceModalTitle').textContent='Create Invoice'; invoiceModal.classList.add('active'); setTimeout(()=>$('#invClient').focus(),10); }
