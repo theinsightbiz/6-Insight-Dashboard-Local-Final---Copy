@@ -564,33 +564,154 @@ function formatMonthLabel(m){
   const [y, mo] = m.split('-').map(Number);
   return new Date(y, mo-1, 1).toLocaleString('en-IN',{month:'short', year:'numeric'});
 }
-function rowHtml(t){
-  const out = (Number(t.fee||0) - Number(t.advance||0));
-  const overdue = t.deadline && t.deadline < todayStr() && t.status !== 'Completed';
-  const recBadge = t.recur ? ` <span class="badge recurring" title="${t.recurQuarterly?'Recurring quarterly':'Recurring monthly'}">${t.recurQuarterly?'Quarterly':'Monthly'}</span>` : '';
-  return `<tr class="row" data-id="${esc(t.id)}">
-    <td><input type="checkbox" class="row-select" data-id="${esc(t.id)}" onchange="toggleSelect('${esc(t.id)}', this.checked)"></td>
-    <td title="${esc(t.notes||'')}"><strong>${esc(t.client)}</strong></td>
-    <td>${esc(t.title)}${recBadge}</td>
-    <td><span class="badge priority ${esc((t.priority||'').toLowerCase())}">${esc(t.priority||'')}</span></td>
-    <td>${esc(t.assignee||'')}</td>
+
+function rowHtml(t) {
+  const out = Number(t.fee || 0) - Number(t.advance || 0);
+
+  const overdue =
+    t.deadline &&
+    t.deadline < todayStr() &&
+    t.status !== 'Completed';
+
+  const recBadge = t.recur
+    ? ` <span class="badge recurring"
+         title="${t.recurQuarterly ? 'Recurring quarterly' : 'Recurring monthly'}">
+         ${t.recurQuarterly ? 'Quarterly' : 'Monthly'}
+       </span>`
+    : '';
+
+  // Payment mode: SET / CASH / BANK
+  const paymentMode =
+    ['cash', 'bank'].includes(t.paymentMode)
+      ? t.paymentMode
+      : 'unset';
+
+  const paymentLabel =
+    paymentMode === 'cash'
+      ? 'CASH'
+      : paymentMode === 'bank'
+        ? 'BANK'
+        : 'SET';
+
+  return `
+  <tr class="row" data-id="${esc(t.id)}">
+
     <td>
-      <select class="status" onchange="changeStatus('${esc(t.id)}', this.value)">
-        ${['Not Started','In Progress','Waiting Client','On Hold','Completed'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}
+      <input
+        type="checkbox"
+        class="row-select"
+        data-id="${esc(t.id)}"
+        onchange="toggleSelect('${esc(t.id)}', this.checked)"
+      >
+    </td>
+
+    <!-- Client name and payment mode -->
+    <td title="${esc(t.notes || '')}">
+      <div class="client-cell">
+
+        <strong>${esc(t.client)}</strong>
+
+        <button
+          type="button"
+          class="payment-toggle ${paymentMode}"
+          title="Payment mode: ${paymentLabel}. Click to change."
+          onclick="event.stopPropagation(); togglePaymentMode('${esc(t.id)}')"
+        >
+          ${paymentLabel}
+        </button>
+
+      </div>
+    </td>
+
+    <!-- Task -->
+    <td>
+      ${esc(t.title)}
+      ${recBadge}
+    </td>
+
+    <!-- Priority -->
+    <td>
+      <span class="badge priority ${esc((t.priority || '').toLowerCase())}">
+        ${esc(t.priority || '')}
+      </span>
+    </td>
+
+    <!-- In-Charge -->
+    <td>${esc(t.assignee || '')}</td>
+
+    <!-- Status -->
+    <td>
+      <select
+        class="status"
+        onchange="changeStatus('${esc(t.id)}', this.value)"
+      >
+        ${[
+          'Not Started',
+          'In Progress',
+          'Waiting Client',
+          'On Hold',
+          'Completed'
+        ].map(s => `
+          <option ${s === t.status ? 'selected' : ''}>
+            ${s}
+          </option>
+        `).join('')}
       </select>
     </td>
-    <td class="${overdue?'overdue':''}">${fmtDateDDMMYYYY(t.deadline)||''}</td>
-    <td class="money">₹ ${fmtMoney(t.fee||0)}</td>
-    <td class="money">₹ ${fmtMoney(t.advance||0)}</td>
-    <td class="money">₹ ${fmtMoney(out)}</td>
+
+    <!-- Deadline -->
+    <td class="${overdue ? 'overdue' : ''}">
+      ${fmtDateDDMMYYYY(t.deadline) || ''}
+    </td>
+
+    <!-- Fee -->
+    <td class="money">
+      ₹ ${fmtMoney(t.fee || 0)}
+    </td>
+
+    <!-- Received -->
+    <td class="money">
+      ₹ ${fmtMoney(t.advance || 0)}
+    </td>
+
+    <!-- Outstanding -->
+    <td class="money">
+      ₹ ${fmtMoney(out)}
+    </td>
+
+    <!-- Invoice Status -->
     <td>
-      <select class="status" onchange="changeInvoiceStatus('${t.id}', this.value)">
-        ${['Not Raised','Sent','Paid','Partially Paid'].map(s=>`<option ${s===(t.invoiceStatus||'Not Raised')?'selected':''}>${s}</option>`).join('')}
+      <select
+        class="status"
+        onchange="changeInvoiceStatus('${esc(t.id)}', this.value)"
+      >
+        ${[
+          'Not Raised',
+          'Sent',
+          'Paid',
+          'Partially Paid'
+        ].map(s => `
+          <option ${
+            s === (t.invoiceStatus || 'Not Raised')
+              ? 'selected'
+              : ''
+          }>
+            ${s}
+          </option>
+        `).join('')}
       </select>
     </td>
+
+    <!-- Actions -->
     <td>
-      <button class="btn ghost" onclick="editTask('${esc(t.id)}')">Edit</button>
+      <button
+        class="btn ghost"
+        onclick="editTask('${esc(t.id)}')"
+      >
+        Edit
+      </button>
     </td>
+
   </tr>`;
 }
 
@@ -610,6 +731,57 @@ async function changeStatus(id, val){
   await tasksRef.child(id).update({ status: val }).catch(e => alert('Update failed: '+e.message));
 }
 window.changeStatus = changeStatus;
+/* =====================================================
+   PAYMENT MODE TOGGLE
+   SET → CASH → BANK → SET
+   ===================================================== */
+
+async function togglePaymentMode(id) {
+
+  if (!id) return;
+
+  const task = tasks.find(t => t.id === id);
+
+  if (!task) return;
+
+  const currentMode = task.paymentMode || '';
+
+  let newMode = '';
+
+  // SET → CASH
+  if (currentMode === '') {
+    newMode = 'cash';
+  }
+
+  // CASH → BANK
+  else if (currentMode === 'cash') {
+    newMode = 'bank';
+  }
+
+  // BANK → SET
+  else if (currentMode === 'bank') {
+    newMode = '';
+  }
+
+  try {
+
+    await tasksRef
+      .child(id)
+      .update({
+        paymentMode: newMode || null
+      });
+
+  } catch (e) {
+
+    alert(
+      'Could not update payment mode: ' +
+      (e?.message || e)
+    );
+
+  }
+}
+
+window.togglePaymentMode = togglePaymentMode;
 
 async function delTask(id){
   const t = tasks.find(x=>x.id===id); if(!t) return;

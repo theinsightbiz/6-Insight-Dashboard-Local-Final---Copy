@@ -1464,7 +1464,138 @@ select optgroup,
 
 #invoiceStatusMulti, #invoiceStatusMultiBtn { width:100%; }
 
+/* =====================================================
+   CLIENT PAYMENT MODE — CASH / BANK TOGGLE
+   ===================================================== */
 
+.client-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+
+/* Base small toggle */
+
+.payment-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+
+  min-width: 44px;
+  height: 18px;
+
+  padding: 0 7px;
+
+  border-radius: 20px;
+
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 16px;
+
+  letter-spacing: .4px;
+
+  cursor: pointer;
+
+  border: 1px solid transparent;
+
+  transition:
+    background-color .18s ease,
+    border-color .18s ease,
+    transform .1s ease,
+    box-shadow .18s ease;
+
+  box-shadow: none;
+}
+
+
+/* ===============================
+   NOT SELECTED
+   =============================== */
+
+.payment-toggle.unset {
+  background: #4b5563 !important;
+  border-color: #6b7280 !important;
+  color: #ffffff !important;
+}
+
+
+/* ===============================
+   CASH = GREEN
+   =============================== */
+
+.payment-toggle.cash {
+  background: #16a34a !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+
+
+/* ===============================
+   BANK = BLUE
+   =============================== */
+
+.payment-toggle.bank {
+  background: #2563eb !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+
+/* Hover */
+
+.payment-toggle:hover {
+  transform: scale(1.05);
+  filter: brightness(1.08);
+}
+
+
+/* Click */
+
+.payment-toggle:active {
+  transform: scale(.96);
+}
+
+
+/* Prevent row hover from removing toggle colour */
+
+.table .row:hover .payment-toggle.cash {
+  background: #16a34a !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+
+.table .row:hover .payment-toggle.bank {
+  background: #2563eb !important;
+  border-color: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+.table .row:hover .payment-toggle.unset {
+  background: #4b5563 !important;
+  border-color: #6b7280 !important;
+  color: #ffffff !important;
+}
+
+
+/* Mobile */
+
+@media (max-width: 640px) {
+
+  .client-cell {
+    gap: 4px;
+  }
+
+  .payment-toggle {
+    min-width: 42px;
+    height: 18px;
+    font-size: 8px;
+    padding: 0 6px;
+  }
+
+}
 
 
 
