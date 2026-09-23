@@ -724,11 +724,12 @@ $('#addTaskBtn') && ($('#addTaskBtn').onclick = async ()=>{
       if(tI){ tI.value=''; } if(tH){ tH.value=''; }
       if(cI){ cI.value=''; } if(cH){ cH.value=''; }
     }catch(e){}});
+    
     /* =====================================================
-   SUSHMIT - AUTO CLIENT NAME
+   ALLOW ANY CLIENT NAME IN BOTH DASHBOARDS
    ===================================================== */
 
-document
+  document
   .getElementById('addTaskBtn')
   ?.addEventListener('click', () => {
 
@@ -743,38 +744,23 @@ document
       const modalTitle =
         document.getElementById('taskModalTitle');
 
-
-      /* ------------------------------
-         Sushmit Dashboard
-         ------------------------------ */
-
-      if (activeDashboard === 'sushmit') {
-
-        if (clientInput) {
-          clientInput.value = 'Sushmit';
-          clientInput.readOnly = true;
-        }
-
-        if (clientHidden) {
-          clientHidden.value = 'Sushmit';
-        }
-
-        if (modalTitle) {
-          modalTitle.textContent = 'New Sushmit Task';
-        }
-
+      // Allow any client name in both dashboards
+      if (clientInput) {
+        clientInput.value = '';
+        clientInput.readOnly = false;
+        clientInput.placeholder = 'Enter or select client name';
       }
 
-      /* ------------------------------
-         Main Dashboard
-         ------------------------------ */
+      if (clientHidden) {
+        clientHidden.value = '';
+      }
 
-      else {
-
-        if (clientInput) {
-          clientInput.readOnly = false;
-        }
-
+      // Change heading according to the dashboard
+      if (modalTitle) {
+        modalTitle.textContent =
+          activeDashboard === 'sushmit'
+            ? 'New Sushmit Task'
+            : 'New Task';
       }
 
     }, 0);
@@ -851,14 +837,12 @@ if (taskForm) {
   taskForm.addEventListener('submit', async (e)=>{
     // Ensure Title & Client from select/new
     const _titleVal = (document.getElementById('fTitleNew')?.value||document.getElementById('fTitle')?.value||'').trim();
-const _clientVal =
-  activeDashboard === 'sushmit'
-    ? 'Sushmit'
-    : (
-        document.getElementById('fClientNew')?.value ||
-        document.getElementById('fClient')?.value ||
-        ''
-      ).trim();
+const _clientVal = (
+  document.getElementById('fClientNew')?.value ||
+  document.getElementById('fClient')?.value ||
+  ''
+).trim();
+
 if(!_titleVal){ e.preventDefault(); alert('Please select a Task Title or enter a new one.'); return; }
     if(!_clientVal){ e.preventDefault(); alert('Please select a Client or enter a new one.'); return; }
     e.preventDefault();
