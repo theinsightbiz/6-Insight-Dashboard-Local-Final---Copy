@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="mobile-responsive-fix.css?v=1">
+  <link rel="stylesheet" href="secure-access.css?v=1">
   
   <!-- html2canvas + jsPDF for client-side PDF export -->
   <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"
@@ -47,13 +48,31 @@
           onerror="window.__libErr = (window.__libErr||[]).concat('tesseract.js load failed')"></script>
 </head>
 <body>
-  <div class="container" id="appRoot">
+  <section id="authScreen" class="auth-screen" aria-label="Sign in to the dashboard">
+    <div class="auth-card">
+      <img src="logo.png" alt="Sanjeev Sri Ram and Co." class="auth-logo">
+      <span class="access-eyebrow">PRIVATE TEAM WORKSPACE</span>
+      <h1>Welcome back</h1>
+      <p>Sign in with your individual account to manage client assignments.</p>
+      <form id="loginForm" autocomplete="on">
+        <label for="loginEmail">Work email</label>
+        <input type="email" id="loginEmail" autocomplete="username" placeholder="name@yourfirm.com" required>
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+        <p id="authError" class="auth-error" role="alert" aria-live="polite"></p>
+        <button type="submit" id="loginBtn" class="btn primary auth-submit">Sign in</button>
+      </form>
+      <small>Access is provided by your firm’s owner. There is no public sign-up.</small>
+    </div>
+  </section>
+  <div class="container" id="appRoot" aria-hidden="true">
     <header>
       <div class="title">
         <img src="logo.png" alt="Firm Logo" class="logo" />
         <span class="pill" id="dashboardLabel">
           Main Dashboard • Tasks • Deadlines • Billing
         </span>
+        <span class="sync-status" id="syncStatus" aria-live="polite"></span>
       </div>
       <div class="actions">
         <button class="btn icon primary" id="addTaskBtn" aria-haspopup="dialog">➕ Add Task</button>
@@ -61,6 +80,10 @@
         <button class="btn icon" id="createInvoiceBtn" aria-haspopup="dialog">🧾 Create Invoice</button>
         <button class="btn icon ghost" id="bulkDeleteBtn" title="Delete selected">🗑️ Bulk Delete</button>
         <button class="btn icon ghost" id="exportCsvBtn">⬇️ Export CSV</button>
+        <div class="account-chip" aria-live="polite">
+          <span id="signedInLabel"></span>
+          <button type="button" class="btn ghost" id="logoutBtn">Sign out</button>
+        </div>
       </div>
     </header>
 
@@ -104,7 +127,7 @@
           <option value="">Month: All</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field owner-only">
   <!-- hidden input keeps compatibility with existing JS -->
   <input type="hidden" id="invoiceStatusFilter" value="">
   <div class="multi" id="invoiceStatusMulti">
@@ -130,9 +153,9 @@
       <div class="card"><h3>Total Tasks</h3><div class="val" id="kpiTotal">0</div></div>
       <div class="card"><h3>Pending</h3><div class="val" id="kpiPending">0</div></div>
       <div class="card"><h3>Overdue</h3><div class="val" id="kpiOverdue">0</div></div>
-      <div class="card"><h3>Fee (₹)</h3><div class="val money" id="kpiFee">0</div></div>
-      <div class="card"><h3>Received (₹)</h3><div class="val money" id="kpiAdv">0</div></div>
-      <div class="card"><h3>Outstanding (₹)</h3><div class="val money" id="kpiOut">0</div></div>
+      <div class="card owner-only"><h3>Fee (₹)</h3><div class="val money" id="kpiFee">0</div></div>
+      <div class="card owner-only"><h3>Received (₹)</h3><div class="val money" id="kpiAdv">0</div></div>
+      <div class="card owner-only"><h3>Outstanding (₹)</h3><div class="val money" id="kpiOut">0</div></div>
     </section>
 
     <!-- Table -->
@@ -144,32 +167,32 @@
     <div class="table-scroll">
       <table class="table" aria-label="Tasks table">
       <colgroup>
-        <col class="col-check">
+        <col class="col-check owner-only">
         <col class="col-client">
         <col class="col-task">
         <col class="col-pri">
         <col class="col-assignee">
         <col class="col-status">
         <col class="col-deadline">
-        <col class="col-money">
-        <col class="col-money">
-        <col class="col-money">
-        <col class="col-invoice">
+        <col class="col-money owner-only">
+        <col class="col-money owner-only">
+        <col class="col-money owner-only">
+        <col class="col-invoice owner-only">
         <col class="col-actions">
       </colgroup>
       <thead class="thead">
         <tr>
-          <th><input type="checkbox" id="selectAll"></th>
+          <th class="owner-only"><input type="checkbox" id="selectAll"></th>
           <th>Client</th>
           <th>Task</th>
           <th>Priority</th>
           <th>In-Charge</th>
           <th>Status</th>
           <th>Deadline</th>
-          <th>Fee</th>
-          <th>Received</th>
-          <th>Outstanding</th>
-          <th>Invoice Status</th>
+          <th class="owner-only">Fee</th>
+          <th class="owner-only">Received</th>
+          <th class="owner-only">Outstanding</th>
+          <th class="owner-only">Invoice Status</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -237,15 +260,15 @@
               <label>Deadline</label>
               <input type="date" id="fDeadline" required />
             </div>
-            <div>
+            <div class="owner-only">
               <label>Fee (₹)</label>
-              <input type="number" step="0.01" min="0" id="fFee" required />
+              <input type="number" step="0.01" min="0" id="fFee" placeholder="Optional — or add later in Billing" />
             </div>
-            <div>
+            <div class="owner-only">
               <label>Received (₹)</label>
-              <input type="number" step="0.01" min="0" id="fAdvance" value="0" />
+              <input type="number" step="0.01" min="0" id="fAdvance" placeholder="Optional" />
             </div>
-            <div>
+            <div class="owner-only">
               <label>Invoice Status</label>
   <select id="fInvoiceStatus">
     <option value="">Select status…</option>
@@ -259,7 +282,7 @@
               <label>Notes / Description</label>
               <textarea id="fNotes" placeholder="Brief details, documents pending, etc."></textarea>
             </div>
-            <div>
+            <div class="owner-only">
               <label><input type="checkbox" id="fRecurring" /> Recurring monthly</label> <label style="margin-left:16px;"><input type="checkbox" id="fRecurringQ" /> Recurring quarterly</label>
               <small class="hint">If checked, this becomes a template. The app will auto‑create instances (monthly or quarterly) on the same day as the deadline.</small>
             </div>
@@ -273,8 +296,31 @@
     </div>
   </div>
 
+  <!-- Owner-only financial editor: separate private Firebase node -->
+  <div class="modal owner-only" id="billingModal" role="dialog" aria-modal="true" aria-labelledby="billingTitle">
+    <div class="dialog billing-dialog">
+      <header><div><span class="access-eyebrow">OWNER ONLY · CONFIDENTIAL</span>
+        <h2 id="billingTitle">Billing details</h2>
+        <p id="billingContext"></p></div></header>
+      <form id="billingForm">
+        <div class="body billing-fields">
+          <div><label for="bFee">Agreed fee (₹)</label><input id="bFee" type="number" min="0" step="0.01" required></div>
+          <div><label for="bReceived">Received (₹)</label><input id="bReceived" type="number" min="0" step="0.01" required></div>
+          <div><label for="bInvoiceStatus">Invoice status</label>
+            <select id="bInvoiceStatus"><option>Not Raised</option><option>Sent</option><option>Partially Paid</option><option>Paid</option></select></div>
+          <div><label for="bPaymentMode">Payment mode</label>
+            <select id="bPaymentMode"><option value="">Not selected</option><option value="cash">Cash</option><option value="bank">Bank</option></select></div>
+          <div class="billing-wide"><label for="bPrivateNotes">Private financial notes</label>
+            <textarea id="bPrivateNotes" placeholder="Visible only to the owner"></textarea></div>
+        </div>
+        <footer><button type="button" class="btn ghost" id="billingCloseBtn">Cancel</button>
+          <button type="submit" class="btn primary" id="billingSaveBtn">Save billing</button></footer>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal: Create Invoice -->
-  <div class="modal" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle">
+  <div class="modal owner-only" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="invoiceModalTitle">
     <div class="dialog">
       <header><h2 id="invoiceModalTitle">Create Invoice</h2></header>
       <form id="invoiceForm">
@@ -318,7 +364,7 @@
   </div>
 
   <!-- Modal: Edit Invoice (Upload PD) -->
-  <div class="modal" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
+  <div class="modal owner-only" id="editInvoiceModal" role="dialog" aria-modal="true" aria-labelledby="editInvoiceTitle">
   <div class="dialog">
     <header>
       <h2 id="editInvoiceTitle">Edit Invoice – Upload Existing PDF</h2>
@@ -349,7 +395,7 @@
 
 
   <!-- Hidden A4 Invoice Template (render target for PDF) -->
-  <div id="invoiceA4" aria-hidden="true">
+  <div id="invoiceA4" class="owner-only" aria-hidden="true">
     <div class="a4 page">
       <div class="inv-letterhead">
         <div class="lh-left">
@@ -428,7 +474,8 @@
   <!-- Only addition: Firebase compat SDK before your original script -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <!-- Your existing app code below (unchanged references) -->
-  <script src="script.js"></script>
+  <script src="script.js?v=secure1"></script>
 </body>
 </html>

@@ -183,92 +183,103 @@ if (typeof firebase === 'undefined') {
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
-/* =====================================================
-   WORKSPACE / DASHBOARD DATABASE
-   ===================================================== */
-
+/* ===== Account and strictly separated database paths ===== */
 const WORKSPACE = 'ssrdashboard';
-
-/*
-  Available dashboards:
-
-  main     = normal firm dashboard
-  sushmit  = dedicated Sushmit dashboard
-*/
+const firebaseAuth = firebase.auth();
+let authUser = null;
+let userRole = null; // 'owner' or 'employee' — resolved from RTDB role, never from a UI choice
+let roleListenerRef = null;
 let activeDashboard = 'main';
-
-
-/* -----------------------------------------------------
-   Get Firebase base path for current dashboard
-   ----------------------------------------------------- */
-function getDashboardBasePath() {
-
-  if (activeDashboard === 'sushmit') {
-    return `workspaces/${WORKSPACE}/clientDashboards/sushmit`;
-  }
-
-  return `workspaces/${WORKSPACE}`;
-}
-
-
-/* -----------------------------------------------------
-   Current Firebase references
-   ----------------------------------------------------- */
-let tasksRef = rtdb.ref(
-  `${getDashboardBasePath()}/tasks`
-);
-
-let skipsRef = rtdb.ref(
-  `${getDashboardBasePath()}/skips`
-);
-
-
-/* -----------------------------------------------------
-   Rebuild Firebase references whenever dashboard changes
-   ----------------------------------------------------- */
-function setDashboardRefs() {
-
-  const basePath = getDashboardBasePath();
-
-  tasksRef = rtdb.ref(
-    `${basePath}/tasks`
-  );
-
-  skipsRef = rtdb.ref(
-    `${basePath}/skips`
-  );
-}
-
-
-/* ---------- App State ---------- */
-
+const base = `workspaces/${WORKSPACE}`;
+const isOwner = () => userRole === 'owner' && !!authUser;
+const isStaff = () => userRole === 'employee' && !!authUser;
+const taskPath = () => `${base}/taskPublic/${activeDashboard}`;
+const financePath = () => `${base}/taskFinance/${activeDashboard}`;
+const skipPath = () => `${base}/taskSkips/${activeDashboard}`;
+let tasksRef = rtdb.ref(taskPath());
+let financeRef = rtdb.ref(financePath());
+let skipsRef = rtdb.ref(skipPath());
 let tasks = [];
+let finance = Object.create(null);
 let skips = [];
 let selectedIds = new Set();
 let isListening = false;
+let listeningGeneration = 0;
+
+function setDashboardRefs() {
+  tasksRef = rtdb.ref(taskPath());
+  financeRef = rtdb.ref(financePath());
+  skipsRef = rtdb.ref(skipPath());
+}
+function setAccessUI(){
+  const signedIn = !!authUser && (isOwner() || isStaff());
+  document.body.classList.toggle('authenticated',signedIn);
+  document.body.classList.toggle('owner-mode',isOwner());
+  document.body.classList.toggle('employee-mode',isStaff());
+  if(el('signedInLabel'))el('signedInLabel').textContent=signedIn
+    ? `${isOwner()?'Owner':'Employee'} · ${authUser.email}` : '';
+  if(el('authScreen')) el('authScreen').hidden=signedIn;
+  if(el('appRoot')) el('appRoot').setAttribute('aria-hidden',signedIn?'false':'true');
+  ['createInvoiceBtn','bulkDeleteBtn'].forEach(id=>{
+    const btn=el(id);if(btn)btn.disabled=!isOwner();
+  });
+  if(el('fRecurring'))el('fRecurring').disabled=!isOwner();
+  if(el('fRecurringQ'))el('fRecurringQ').disabled=!isOwner();
+  if(el('fFee')){el('fFee').required=false;el('fFee').disabled=!isOwner();}
+  if(el('fAdvance'))el('fAdvance').disabled=!isOwner();
+  if(el('fInvoiceStatus'))el('fInvoiceStatus').disabled=!isOwner();
+}
+function authError(message){
+  const node=el('authError'); if(node)node.textContent=message||'';
+}
+async function authenticateUI(user) {
+  if(roleListenerRef){roleListenerRef.off();roleListenerRef=null;}
+  teardownRealtime();
+  authUser=null;userRole=null;finance=Object.create(null);
+  setAccessUI();
+  if(!user) return;
+  try {
+    const ref=rtdb.ref(`${base}/roles/${user.uid}`);
+    const snap=await ref.once('value');
+    const role=snap.val();
+    if(role!=='owner' && role!=='employee'){
+      authError('This account has no dashboard access. Ask the owner to assign a role.');
+      await firebaseAuth.signOut();return;
+    }
+    authUser=user;userRole=role;activeDashboard='main';setDashboardRefs();
+    setAccessUI();updateDashboardUI();render();startRealtime();
+    roleListenerRef=ref;
+    ref.on('value',s=>{
+      if(s.val()!==userRole && firebaseAuth.currentUser?.uid===user.uid){
+        authError('Your access has changed. Please sign in again.');
+        firebaseAuth.signOut();
+      }
+    },e=>{authError('Role verification failed: '+e.message);firebaseAuth.signOut();});
+  } catch(e){authError('Cannot verify access: '+e.message);await firebaseAuth.signOut();}
+}
+
+el('loginForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();authError('');
+  const button=el('loginBtn');button.disabled=true;button.textContent='Signing in…';
+  try{await firebaseAuth.signInWithEmailAndPassword(el('loginEmail').value.trim(),el('loginPassword').value);}
+  catch(err){authError(err.code==='auth/invalid-credential'?'Incorrect email or password.':(err.message||'Sign-in failed.'));}
+  finally{button.disabled=false;button.textContent='Sign in';el('loginPassword').value='';}
+});
+el('logoutBtn')?.addEventListener('click',()=>firebaseAuth.signOut());
+firebaseAuth.onAuthStateChanged(authenticateUI);
+
 
 /* =====================================================
    DASHBOARD SWITCHER
    ===================================================== */
 
-function clearDashboardFilters() {
-
-  const searchInput = document.getElementById('searchInput');
-  const priorityFilter = document.getElementById('priorityFilter');
-  const assigneeFilter = document.getElementById('assigneeFilter');
-  const monthFilter = document.getElementById('monthFilter');
-  const statusFilter = document.getElementById('statusFilter');
-  const invoiceStatusFilter = document.getElementById('invoiceStatusFilter');
-
-  if (searchInput) searchInput.value = '';
-  if (priorityFilter) priorityFilter.value = '';
-  if (assigneeFilter) assigneeFilter.value = '';
-  if (monthFilter) monthFilter.value = '';
-  if (statusFilter) statusFilter.value = '';
-  if (invoiceStatusFilter) invoiceStatusFilter.value = '';
-
+function clearDashboardFilters(){
+  ['searchInput','priorityFilter','assigneeFilter','monthFilter','statusFilter','invoiceStatusFilter']
+    .forEach(id=>{const field=el(id);if(field)field.value='';});
+  // These button handlers also reset the multi-selects' private Set state.
+  el('statusClearBtn')?.click();
+  el('invoiceStatusClearBtn')?.click();
 }
-
 
 function updateDashboardUI() {
 
@@ -283,7 +294,7 @@ function updateDashboardUI() {
     }
 
     if (label) {
-      label.innerHTML = '👤 Sushmit • Tasks • Deadlines • Billing';
+      label.textContent = isOwner() ? '👤 Sushmit • Tasks • Deadlines • Billing' : '👤 Sushmit • Tasks • Deadlines';
     }
 
   } else {
@@ -294,7 +305,7 @@ function updateDashboardUI() {
     }
 
     if (label) {
-      label.innerHTML = 'Main Dashboard • Tasks • Deadlines • Billing';
+      label.textContent = isOwner() ? 'Main Dashboard • Tasks • Deadlines • Billing' : 'Main Dashboard • Tasks • Deadlines';
     }
   }
 }
@@ -310,6 +321,9 @@ function switchDashboard(targetDashboard) {
     IMPORTANT:
     Stop listening to old Firebase database
   */
+  if(!authUser) return;
+  if(el('taskModal'))el('taskModal').classList.remove('active');
+  if(el('billingModal'))el('billingModal').classList.remove('active');
   teardownRealtime();
 
   /*
@@ -360,33 +374,48 @@ document
 
   });
 
-/* ---------- Realtime listeners ---------- */
+/* ---------- Realtime listeners: no employee request is sent to financeRef ---------- */
 function startRealtime(){
-  if (isListening) return;
-  isListening = true;
-
-  skipsRef.on('value', snap => {
-    const obj = snap.val() || {};
-    const arr = Object.values(obj);
-    skips = arr.map(s => ({ id: s.id || `${s.recurringId}_${s.period}`, recurringId: s.recurringId, period: s.period }));
-    render();
-  });
-
-  tasksRef.on('value', async snap => {
-    const obj = snap.val() || {};
-    tasks = Object.values(obj);
-    try { await ensureRecurringInstances(); }
-    catch (e) { console.error('ensureRecurringInstances failed:', e); }
-    render();
-  }, err => {
-    console.error('RTDB listener error:', err?.message || err);
+  if(isListening || !authUser || !userRole)return;
+  if(el('syncStatus')){el('syncStatus').textContent='● Syncing';el('syncStatus').dataset.state='loading';}
+  isListening=true;
+  const generation=++listeningGeneration;
+  let financeReady=!isOwner(), skipsReady=false, tasksReady=false;
+  async function attemptRecurrence(){
+    if(isOwner() && financeReady && skipsReady && tasksReady && generation===listeningGeneration){
+      try{await ensureRecurringInstances();}
+      catch(e){console.error('Recurring generation failed:',e);}
+    }
+  }
+  if(isOwner()){
+    financeRef.on('value',snap=>{
+      if(generation!==listeningGeneration)return;
+      const firstLoad=!financeReady;
+      finance=snap.val()||Object.create(null);financeReady=true;render();
+      if(firstLoad)attemptRecurrence();
+    },err=>console.error('Owner finance read failed:',err.message));
+  }else{finance=Object.create(null);}
+  skipsRef.on('value',snap=>{
+    if(generation!==listeningGeneration)return;
+    skips=Object.values(snap.val()||{}).map(s=>({
+      id:s.id||`${s.recurringId}_${s.period}`,
+      recurringId:s.recurringId,period:s.period
+    }));skipsReady=true;render();attemptRecurrence();
+  },err=>console.error('Task skip read failed:',err.message));
+  tasksRef.on('value',snap=>{
+    if(generation!==listeningGeneration)return;
+    tasks=Object.values(snap.val()||{});tasksReady=true;render();attemptRecurrence();
+    if(el('syncStatus')){el('syncStatus').textContent='● Live';el('syncStatus').dataset.state='live';}
+  },err=>{
+    console.error('Task read failed:',err.message);
+    if(el('syncStatus')){el('syncStatus').textContent='● Access / sync error';el('syncStatus').dataset.state='error';}
   });
 }
 function teardownRealtime(){
-  if (!isListening) return;
-  isListening = false;
-  tasksRef.off(); skipsRef.off();
-  tasks=[]; skips=[]; selectedIds.clear();
+  ++listeningGeneration;
+  if(isListening){tasksRef.off();skipsRef.off();if(isOwner())financeRef.off();}
+  isListening=false;tasks=[];finance=Object.create(null);skips=[];selectedIds.clear();
+  if(el('syncStatus'))el('syncStatus').textContent='';
   render();
 }
 
@@ -395,6 +424,7 @@ function isSkipped(recurringId, period){
   return !!skips.find(s => s.recurringId === recurringId && s.period === period);
 }
 async function addSkip(recurringId, period){
+  if(!isOwner())throw new Error('Only owner can change recurring schedule.');
   if (!recurringId || !period || isSkipped(recurringId, period)) return;
   const id = `${recurringId}_${period}`;
   await skipsRef.child(id).set({ id, recurringId, period, createdAt: Date.now() }).catch(e => alert('Write failed (skips): ' + e.message));
@@ -409,7 +439,7 @@ const HORIZON_MONTHS = 9;
 let isGenerating = false;
 
 async function ensureRecurringInstances() {
-  if (isGenerating) return;
+  if (!isOwner() || isGenerating) return;
   isGenerating = true;
   try {
     const now = new Date();
@@ -434,8 +464,8 @@ async function ensureRecurringInstances() {
       const recurDay = tpl.recurDay || (tpl.deadline ? Number(tpl.deadline.slice(8,10)) : now.getDate());
 
       if (!tpl.recurringId || tpl.recurDay !== recurDay) {
-        updates[`${getDashboardBasePath()}/tasks/${tpl.id}/recurringId`] = rid;
-        updates[`${getDashboardBasePath()}/tasks/${tpl.id}/recurDay`] = recurDay;
+        updates[`${taskPath()}/${tpl.id}/recurringId`] = rid;
+        updates[`${taskPath()}/${tpl.id}/recurDay`] = recurDay;
         tpl.recurringId = rid; tpl.recurDay = recurDay;
       }
 
@@ -450,17 +480,15 @@ async function ensureRecurringInstances() {
         const id = `${rid}_${period}`;
         const deadline = makeDateYMD(y, m, recurDay);
 
-        updates[`${getDashboardBasePath()}/tasks/${id}`] = {
+        updates[`${taskPath()}/${id}`] = {
           id,
           client: tpl.client,
           title: tpl.title,
           priority: tpl.priority,
           assignee: tpl.assignee,
           status: 'Not Started',
-          fee: Number(tpl.fee || 0),
-          advance: 0,
-          invoiceStatus: 'Not Raised',
           notes: tpl.notes || '',
+          createdBy: tpl.createdBy || authUser.uid,
           recur: true,
           recurDay,
           recurQuarterly: !!tpl.recurQuarterly,
@@ -470,6 +498,13 @@ async function ensureRecurringInstances() {
           period
         };
         existingKeys.add(key);
+        const templateBilling=finance[tpl.id];
+        if(templateBilling && Number.isFinite(Number(templateBilling.fee)) && templateBilling.fee != null){
+          updates[`${financePath()}/${id}`]={
+            fee:Number(templateBilling.fee),advance:0,invoiceStatus:'Not Raised',
+            updatedAt:Date.now(),updatedBy:authUser.uid
+          };
+        }
       }
     }
 
@@ -501,7 +536,7 @@ const isf = isfRaw ? new Set(isfRaw.split('|')) : null;
     const matchS = !sf || sf.has(t.status);
     const matchA = !af || t.assignee === af;
     const matchM = !mf || yymm(t.deadline) === mf;
-    const matchI = !isf || isf.has(t.invoiceStatus || 'Not Raised');
+    const matchI = !isOwner() || !isf || isf.has(finance[t.id]?.invoiceStatus || 'Not Raised');
     return matchQ && matchP && matchS && matchA && matchI && matchM;
   });
 
@@ -512,7 +547,7 @@ const isf = isfRaw ? new Set(isfRaw.split('|')) : null;
     if (sortBy==='createdAt') return ((a.createdAt||0)-(b.createdAt||0)) * dir;
     if (sortBy==='priority')  return (prioRank(a.priority)-prioRank(b.priority)) * dir;
     if (sortBy==='status')    return (a.status||'').localeCompare(b.status||'') * dir;
-    if (sortBy==='fee')       return ((a.fee||0)-(b.fee||0)) * dir;
+    if (sortBy==='fee' && isOwner()) return ((finance[a.id]?.fee||0)-(finance[b.id]?.fee||0)) * dir;
     return 0;
   });
 
@@ -544,8 +579,8 @@ const isf = isfRaw ? new Set(isfRaw.split('|')) : null;
   const pending = visible.filter(t => t.status !== 'Completed').length;
   const overdue = visible.filter(t => t.status !== 'Completed' && t.deadline && t.deadline < now).length;
 
-  const sumFee = visible.reduce((s,t) => s + Number(t.fee || 0), 0);
-  const sumAdv = visible.reduce((s,t) => s + Number(t.advance || 0), 0);
+  const sumFee = isOwner()?visible.reduce((s,t)=>s+Number(finance[t.id]?.fee||0),0):0;
+  const sumAdv = isOwner()?visible.reduce((s,t)=>s+Number(finance[t.id]?.advance||0),0):0;
   const sumOut = sumFee - sumAdv;
 
   $('#kpiTotal') && ($('#kpiTotal').textContent = total);
@@ -565,153 +600,32 @@ function formatMonthLabel(m){
   return new Date(y, mo-1, 1).toLocaleString('en-IN',{month:'short', year:'numeric'});
 }
 
-function rowHtml(t) {
-  const out = Number(t.fee || 0) - Number(t.advance || 0);
-
-  const overdue =
-    t.deadline &&
-    t.deadline < todayStr() &&
-    t.status !== 'Completed';
-
-  const recBadge = t.recur
-    ? ` <span class="badge recurring"
-         title="${t.recurQuarterly ? 'Recurring quarterly' : 'Recurring monthly'}">
-         ${t.recurQuarterly ? 'Quarterly' : 'Monthly'}
-       </span>`
-    : '';
-
-  // Payment mode: SET / CASH / BANK
-  const paymentMode =
-    ['cash', 'bank'].includes(t.paymentMode)
-      ? t.paymentMode
-      : 'unset';
-
-  const paymentLabel =
-    paymentMode === 'cash'
-      ? 'CASH'
-      : paymentMode === 'bank'
-        ? 'BANK'
-        : 'SET';
-
-  return `
-  <tr class="row" data-id="${esc(t.id)}">
-
-    <td>
-      <input
-        type="checkbox"
-        class="row-select"
-        data-id="${esc(t.id)}"
-        onchange="toggleSelect('${esc(t.id)}', this.checked)"
-      >
-    </td>
-
-    <!-- Client name and payment mode -->
-    <td title="${esc(t.notes || '')}">
-      <div class="client-cell">
-
-        <strong>${esc(t.client)}</strong>
-
-        <button
-          type="button"
-          class="payment-toggle ${paymentMode}"
-          title="Payment mode: ${paymentLabel}. Click to change."
-          onclick="event.stopPropagation(); togglePaymentMode('${esc(t.id)}')"
-        >
-          ${paymentLabel}
-        </button>
-
-      </div>
-    </td>
-
-    <!-- Task -->
-    <td>
-      ${esc(t.title)}
-      ${recBadge}
-    </td>
-
-    <!-- Priority -->
-    <td>
-      <span class="badge priority ${esc((t.priority || '').toLowerCase())}">
-        ${esc(t.priority || '')}
-      </span>
-    </td>
-
-    <!-- In-Charge -->
-    <td>${esc(t.assignee || '')}</td>
-
-    <!-- Status -->
-    <td>
-      <select
-        class="status"
-        onchange="changeStatus('${esc(t.id)}', this.value)"
-      >
-        ${[
-          'Not Started',
-          'In Progress',
-          'Waiting Client',
-          'On Hold',
-          'Completed'
-        ].map(s => `
-          <option ${s === t.status ? 'selected' : ''}>
-            ${s}
-          </option>
-        `).join('')}
-      </select>
-    </td>
-
-    <!-- Deadline -->
-    <td class="${overdue ? 'overdue' : ''}">
-      ${fmtDateDDMMYYYY(t.deadline) || ''}
-    </td>
-
-    <!-- Fee -->
-    <td class="money">
-      ₹ ${fmtMoney(t.fee || 0)}
-    </td>
-
-    <!-- Received -->
-    <td class="money">
-      ₹ ${fmtMoney(t.advance || 0)}
-    </td>
-
-    <!-- Outstanding -->
-    <td class="money">
-      ₹ ${fmtMoney(out)}
-    </td>
-
-    <!-- Invoice Status -->
-    <td>
-      <select
-        class="status"
-        onchange="changeInvoiceStatus('${esc(t.id)}', this.value)"
-      >
-        ${[
-          'Not Raised',
-          'Sent',
-          'Paid',
-          'Partially Paid'
-        ].map(s => `
-          <option ${
-            s === (t.invoiceStatus || 'Not Raised')
-              ? 'selected'
-              : ''
-          }>
-            ${s}
-          </option>
-        `).join('')}
-      </select>
-    </td>
-
-    <!-- Actions -->
-    <td>
-      <button
-        class="btn ghost"
-        onclick="editTask('${esc(t.id)}')"
-      >
-        Edit
-      </button>
-    </td>
-
+function rowHtml(t){
+  const money=isOwner()?finance[t.id]||{}:{};
+  const out=Number(money.fee||0)-Number(money.advance||0);
+  const overdue=t.deadline && t.deadline<todayStr() && t.status!=='Completed';
+  const recur=t.recur?` <span class="badge recurring">${t.recurQuarterly?'Quarterly':'Monthly'}</span>`:'';
+  const mode=['cash','bank'].includes(money.paymentMode)?money.paymentMode:'unset';
+  const label=mode==='cash'?'CASH':mode==='bank'?'BANK':'SET';
+  const clientBadge=isOwner()?`<button type="button" class="payment-toggle ${mode}" title="Payment mode: ${label}. Click to change" onclick="togglePaymentMode(this.closest('tr').dataset.id)">${label}</button>`:'';
+  const invoiceOptions=['Not Raised','Sent','Paid','Partially Paid'].map(s=>
+    `<option ${s===(money.invoiceStatus||'Not Raised')?'selected':''}>${s}</option>`).join('');
+  const statusOptions=['Not Started','In Progress','Waiting Client','On Hold','Completed'].map(s=>
+    `<option ${s===t.status?'selected':''}>${s}</option>`).join('');
+  return `<tr class="row" data-id="${esc(t.id)}">
+    ${isOwner()?`<td><input type="checkbox" class="row-select" data-id="${esc(t.id)}" onchange="toggleSelect(this.closest('tr').dataset.id,this.checked)"></td>`:''}
+    <td title="${esc(t.notes||'')}"><div class="client-cell"><strong>${esc(t.client||'')}</strong>${clientBadge}</div></td>
+    <td>${esc(t.title||'')}${recur}</td>
+    <td><span class="badge priority ${esc((t.priority||'').toLowerCase())}">${esc(t.priority||'')}</span></td>
+    <td>${esc(t.assignee||'')}</td>
+    <td><select class="status" onchange="changeStatus(this.closest('tr').dataset.id,this.value)">${statusOptions}</select></td>
+    <td class="${overdue?'overdue':''}">${fmtDateDDMMYYYY(t.deadline)||''}</td>
+    ${isOwner()?`<td class="money">${money.fee==null?'—':'₹ '+fmtMoney(money.fee)}</td>
+    <td class="money">${money.advance==null?'—':'₹ '+fmtMoney(money.advance)}</td>
+    <td class="money">${money.fee==null?'—':'₹ '+fmtMoney(out)}</td>
+    <td><select class="status" onchange="changeInvoiceStatus(this.closest('tr').dataset.id,this.value)">${invoiceOptions}</select></td>`:''}
+    <td><div class="row-buttons"><button class="btn ghost" onclick="editTask(this.closest('tr').dataset.id)">Edit</button>
+      ${isOwner()?`<button class="btn billing-open" onclick="openBilling(this.closest('tr').dataset.id)">${finance[t.id]?'₹ Billing':'＋ Billing'}</button>`:''}</div></td>
   </tr>`;
 }
 
@@ -731,77 +645,32 @@ async function changeStatus(id, val){
   await tasksRef.child(id).update({ status: val }).catch(e => alert('Update failed: '+e.message));
 }
 window.changeStatus = changeStatus;
-/* =====================================================
-   PAYMENT MODE TOGGLE
-   SET → CASH → BANK → SET
-   ===================================================== */
-
-async function togglePaymentMode(id) {
-
-  if (!id) return;
-
-  const task = tasks.find(t => t.id === id);
-
-  if (!task) return;
-
-  const currentMode = task.paymentMode || '';
-
-  let newMode = '';
-
-  // SET → CASH
-  if (currentMode === '') {
-    newMode = 'cash';
-  }
-
-  // CASH → BANK
-  else if (currentMode === 'cash') {
-    newMode = 'bank';
-  }
-
-  // BANK → SET
-  else if (currentMode === 'bank') {
-    newMode = '';
-  }
-
-  try {
-
-    await tasksRef
-      .child(id)
-      .update({
-        paymentMode: newMode || null
-      });
-
-  } catch (e) {
-
-    alert(
-      'Could not update payment mode: ' +
-      (e?.message || e)
-    );
-
-  }
+/* Finance operations only use the owner-only finance node. */
+async function togglePaymentMode(id){
+  if(!isOwner())return;
+  const current=finance[id]?.paymentMode||'';
+  const next=current==='cash'?'bank':current==='bank'?'':'cash';
+  try{await financeRef.child(id).update({paymentMode:next||null});}
+  catch(e){alert('Payment mode update failed: '+e.message);}
 }
-
-window.togglePaymentMode = togglePaymentMode;
-
+window.togglePaymentMode=togglePaymentMode;
 async function delTask(id){
-  const t = tasks.find(x=>x.id===id); if(!t) return;
-  if (t.recur && !t.period && t.recurringId){
-    if(!confirm('Delete this recurring template and all its instances?')) return;
-    await tasksRef.child(id).remove().catch(e=>alert('Delete failed: '+e.message));
-    const inst = tasks.filter(x=>x.recurringId===t.recurringId && x.period);
-    for (const it of inst) await tasksRef.child(it.id).remove().catch(()=>{});
-    await removeSkipsForSeries(t.recurringId);
-  } else if (t.recur && t.period && t.recurringId){
-    if(!confirm('Delete this recurring instance for this month?')) return;
-    await addSkip(t.recurringId, t.period);
-    await tasksRef.child(id).remove().catch(e=>alert('Delete failed: '+e.message));
-  } else {
-    if(!confirm('Delete this task?')) return;
-    await tasksRef.child(id).remove().catch(e=>alert('Delete failed: '+e.message));
+  if(!isOwner())return;
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  const related=t.recur&&!t.period&&t.recurringId?
+    tasks.filter(x=>x.recurringId===t.recurringId):[t];
+  if(!confirm(`Delete ${related.length} selected task(s) and their billing records?`))return;
+  const updates={};for(const row of related){
+    updates[`${taskPath()}/${row.id}`]=null;
+    updates[`${financePath()}/${row.id}`]=null;
+    selectedIds.delete(row.id);
   }
-  selectedIds.delete(id);
+  if(t.recur&&t.period&&t.recurringId)await addSkip(t.recurringId,t.period);
+  try{await rtdb.ref().update(updates);}
+  catch(e){alert('Delete failed: '+e.message);}
+  if(t.recur&&!t.period&&t.recurringId)await removeSkipsForSeries(t.recurringId);
 }
-window.delTask = delTask;
+window.delTask=delTask;
 
 /* ---------- Modal handling ---------- */
 const modal = $('#taskModal');
@@ -952,9 +821,9 @@ function editTask(id){
     $('#fAssignee').value = t.assignee||'';
     $('#fStatus').value = t.status||'In Progress';
     $('#fDeadline').value = t.deadline||'';
-    $('#fFee').value = t.fee||0;
-    $('#fAdvance').value = t.advance||0;
-    $('#fInvoiceStatus').value = t.invoiceStatus||'';
+    $('#fFee').value = isOwner() ? (finance[id]?.fee ?? '') : '';
+    $('#fAdvance').value = isOwner() ? (finance[id]?.advance ?? '') : '';
+    $('#fInvoiceStatus').value = isOwner() ? (finance[id]?.invoiceStatus||'') : '';
     $('#fNotes').value = t.notes||'';
     $('#fRecurring') && ($('#fRecurring').checked = !!t.recur && !t.period);
     $('#fRecurringQ') && ($('#fRecurringQ').checked = !!t.recurQuarterly && !t.period);
@@ -996,111 +865,82 @@ function editTask(id){
 window.editTask = editTask;
 
 async function changeInvoiceStatus(id, val){
-  if (!id) return;
+  if(!isOwner() || !id)return;
   try{
-    await tasksRef.child(id).update({ invoiceStatus: val });
+    await financeRef.child(id).update({ invoiceStatus: val, updatedAt:Date.now(), updatedBy:authUser.uid });
   } catch(e){
     alert('Update failed (invoice status): ' + (e?.message || e));
   }
 }
 window.changeInvoiceStatus = changeInvoiceStatus;
 
-if (taskForm) {
-  taskForm.addEventListener('submit', async (e)=>{
-    // Ensure Title & Client from select/new
-    const _titleVal = (document.getElementById('fTitleNew')?.value||document.getElementById('fTitle')?.value||'').trim();
-const _clientVal = (
-  document.getElementById('fClientNew')?.value ||
-  document.getElementById('fClient')?.value ||
-  ''
-).trim();
-
-if(!_titleVal){ e.preventDefault(); alert('Please select a Task Title or enter a new one.'); return; }
-    if(!_clientVal){ e.preventDefault(); alert('Please select a Client or enter a new one.'); return; }
+if(taskForm){
+  taskForm.addEventListener('submit',async e=>{
     e.preventDefault();
-    const editId = taskForm.dataset.editId;
-    const existing = editId ? tasks.find(x=>x.id===editId) : null;
-
-    const isRecurringTemplate = $('#fRecurring')?.checked;
-    const isRecurringQuarterly = $('#fRecurringQ')?.checked;
-    const dval = $('#fDeadline')?.value || '';
-
-    const data = {
-      client: _clientVal,
-      title: _titleVal,
-      priority: $('#fPriority')?.value || 'Medium',
-      assignee: $('#fAssignee')?.value.trim() || '',
-      status: $('#fStatus')?.value || 'In Progress',
-      deadline: dval,
-      fee: Number($('#fFee')?.value || 0),
-      advance: Number($('#fAdvance')?.value || 0),
-      invoiceStatus: $('#fInvoiceStatus')?.value || '',
-      notes: $('#fNotes')?.value?.trim() || ''
-    };
-    if (data.advance > data.fee){ alert('Advance cannot exceed total fee.'); return; }
-
-    try{
-      if (existing){
-        const wasTemplate = !!existing.recur && !existing.period;
-        if (wasTemplate){
-          const recurDay = dval ? Number(dval.slice(8,10)) : new Date().getDate();
-          const updates = { ...data, recur:true, recurDay, recurringId: existing.recurringId || (crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random())), recurQuarterly: !!isRecurringQuarterly };
-          await tasksRef.child(existing.id).update(updates);
-          const today = todayStr();
-          const fut = tasks.filter(t=> t.recurringId===updates.recurringId && t.period && t.deadline>=today);
-          for (const it of fut) await tasksRef.child(it.id).remove();
-          await ensureRecurringInstances();
-        } else {
-          await tasksRef.child(existing.id).update(data);
-        }
-      } else {
-        if (isRecurringTemplate || isRecurringQuarterly){
-          const recurDay = dval ? Number(dval.slice(8,10)) : new Date().getDate();
-          const rid = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
-          const id = rid;
-          const tpl = { id, createdAt: Date.now(), ...data, recur:true, recurDay, recurringId: rid, period: null, ...(isRecurringQuarterly?{recurQuarterly:true}:{}) };
-          await tasksRef.child(id).set(tpl);
-          await ensureRecurringInstances();
-        } else {
-          const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random());
-          await tasksRef.child(id).set({ id, createdAt: Date.now(), ...data });
-        }
-      }
-    } catch(e){
-      alert('Save failed: ' + e.message);
+    if(!authUser || (!isOwner()&&!isStaff()))return;
+    const title=(el('fTitleNew')?.value||el('fTitle')?.value||'').trim();
+    const client=(el('fClientNew')?.value||el('fClient')?.value||'').trim();
+    if(!client||!title){alert('Client name and task title are required.');return;}
+    const editId=taskForm.dataset.editId;
+    const existing=editId?tasks.find(t=>t.id===editId):null;
+    if(editId&&!existing){alert('Task is no longer available. Please refresh.');return;}
+    const body={client,title,priority:el('fPriority').value,assignee:el('fAssignee').value.trim(),
+      status:el('fStatus').value,deadline:el('fDeadline').value,notes:el('fNotes').value.trim()};
+    const wantsMonthly=isOwner()&&el('fRecurring')?.checked;
+    const wantsQuarterly=isOwner()&&el('fRecurringQ')?.checked;
+    const recur=wantsMonthly||wantsQuarterly;
+    const fee=isOwner()&&el('fFee').value!==''?Number(el('fFee').value):null;
+    const received=isOwner()&&el('fAdvance').value!==''?Number(el('fAdvance').value):null;
+    if(isOwner()&&fee!=null&&received!=null&&received>fee){alert('Received cannot exceed fee.');return;}
+    if(isOwner() && ((fee!=null&&!Number.isFinite(fee))||(received!=null&&!Number.isFinite(received)))){
+      alert('Please enter valid financial amounts.');return;
     }
-
-    closeModal();
+    const saveBtn=el('saveBtn');if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving…';}
+    try{
+      let id=existing?.id||(crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random()));
+      if(existing){
+        await tasksRef.child(id).update(body);
+        if(isOwner()&&existing.recur&&!existing.period){
+          const rid=existing.recurringId||id;
+          await tasksRef.child(id).update({recur:true,recurQuarterly:wantsQuarterly,recurDay:Number(body.deadline.slice(8,10)),recurringId:rid});
+          // Existing generated rows remain intact (including their individual billing).
+        }
+      }else{
+        const task={id,...body,createdAt:Date.now(),createdBy:authUser.uid};
+        if(recur){Object.assign(task,{recur:true,recurDay:Number(body.deadline.slice(8,10)),
+          recurQuarterly:wantsQuarterly,recurringId:id});}
+        await tasksRef.child(id).set(task);
+      }
+      if(isOwner() && (fee!==null || received!==null || el('fInvoiceStatus').value)){
+        const old=finance[id]||{};
+        const next={...old,fee:fee===null?(old.fee??0):fee,
+          advance:received===null?(old.advance??0):received,
+          invoiceStatus:el('fInvoiceStatus').value||old.invoiceStatus||'Not Raised',
+          updatedAt:Date.now(),updatedBy:authUser.uid};
+        await financeRef.child(id).set(next);
+      }
+      closeModal();
+      if(isOwner() && recur && !existing)await ensureRecurringInstances();
+    }catch(err){alert('Task save failed: '+err.message);}
+    finally{if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Task';}}
   });
 }
 
+
 /* ---------- Prompt-based create/edit (fallback if no modal) ---------- */
 async function createTaskByPrompt(){
-  const client = prompt('Client?'); if (client==null) return;
-  const title = prompt('Task title?'); if (title==null) return;
-  const priority = prompt('Priority (High/Medium/Low)?','Medium') || 'Medium';
-  const assignee = prompt('In-Charge?') || '';
-  const status = prompt('Status? (Not Started/In Progress/Waiting Client/On Hold/Completed)','In Progress') || 'In Progress';
-  const deadline = prompt('Deadline (YYYY-MM-DD)?', todayStr()) || '';
-  const fee = Number(prompt('Fee?','0')||0);
-  const advance = Number(prompt('Advance?','0')||0);
-  const invoiceDate = prompt('Invoice Date (YYYY-MM-DD)?','') || '';
-  const notes = prompt('Notes?','') || '';
-  const id = crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
-  await tasksRef.child(id).set({ id, client, title, priority, assignee, status, deadline, fee, advance, invoiceDate, notes, createdAt: Date.now() });
+  if(!authUser)throw new Error('Sign in required');
+  const client=prompt('Client name?');if(!client?.trim())return;
+  const title=prompt('Task title?');if(!title?.trim())return;
+  const id=crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random());
+  await tasksRef.child(id).set({id,client:client.trim(),title:title.trim(),priority:'Medium',
+    assignee:authUser.email,status:'Not Started',deadline:todayStr(),notes:'',
+    createdAt:Date.now(),createdBy:authUser.uid});
 }
 async function editTaskByPrompt(t){
-  const client = prompt('Client?', t.client||''); if (client==null) return;
-  const title = prompt('Task title?', t.title||''); if (title==null) return;
-  const priority = prompt('Priority (High/Medium/Low)?', t.priority||'Medium') || 'Medium';
-  const assignee = prompt('In-Charge?', t.assignee||'') || '';
-  const status = prompt('Status?', t.status||'In Progress') || 'In Progress';
-  const deadline = prompt('Deadline (YYYY-MM-DD)?', t.deadline||todayStr()) || '';
-  const fee = Number(prompt('Fee?', String(t.fee||0))||0);
-  const advance = Number(prompt('Advance?', String(t.advance||0))||0);
-  const invoiceDate = prompt('Invoice Date (YYYY-MM-DD)?', t.invoiceDate||'') || '';
-  const notes = prompt('Notes?', t.notes||'') || '';
-  await tasksRef.child(t.id).update({ client, title, priority, assignee, status, deadline, fee, advance, invoiceDate, notes });
+  if(!authUser)return;
+  const title=prompt('Task title?',t.title||'');if(!title?.trim())return;
+  await tasksRef.child(t.id).update({title:title.trim()});
 }
 
 /* ---------- Filters, select-all, bulk, export ---------- */
@@ -1196,64 +1036,44 @@ $('#selectAll')?.addEventListener('change', (e)=>{
   render();
 });
 
-$('#bulkDeleteBtn')?.addEventListener('click', async ()=>{
-  const visibleRows = $$('#taskTbody tr');
-  const visibleIds = new Set(visibleRows.map(r=>r.dataset.id));
-  const toActOn = [...selectedIds].filter(id=>visibleIds.has(id));
-  if (toActOn.length===0){ alert('Select at least one task (visible).'); return; }
-  const pass = prompt('Enter password to delete selected tasks:');
-  if (pass !== '14Dec@1998'){ alert('Incorrect password.'); return; }
-  if (!confirm(`Delete ${toActOn.length} task(s)? This cannot be undone.`)) return;
-
-  const toDelete = new Set(toActOn);
-  for (const t of tasks){
-    if (!toDelete.has(t.id)) continue;
-    if (t.recur && !t.period && t.recurringId){
-      const inst = tasks.filter(x=>x.recurringId===t.recurringId && x.period);
-      inst.forEach(i=>toDelete.add(i.id));
+$('#bulkDeleteBtn')?.addEventListener('click',async()=>{
+  if(!isOwner()){alert('Owner access required.');return;}
+  const shown=new Set($$('#taskTbody tr').map(r=>r.dataset.id));
+  const selected=[...selectedIds].filter(id=>shown.has(id));
+  if(!selected.length){alert('Select at least one visible task.');return;}
+  if(!confirm(`Delete ${selected.length} tasks and any linked billing data? This cannot be undone.`))return;
+  const all=new Set(selected);
+  for(const id of selected){
+    const t=tasks.find(x=>x.id===id);
+    if(t?.recur&&!t.period&&t.recurringId){
+      tasks.filter(x=>x.recurringId===t.recurringId).forEach(x=>all.add(x.id));
       await removeSkipsForSeries(t.recurringId);
-    } else if (t.recur && t.period && t.recurringId){
-      await addSkip(t.recurringId, t.period);
-    }
+    }else if(t?.recur&&t.period&&t.recurringId)await addSkip(t.recurringId,t.period);
   }
-  for (const id of toDelete){ await tasksRef.child(id).remove().catch(()=>{}); }
-  selectedIds.clear();
+  const updates={};
+  for(const id of all){updates[`${taskPath()}/${id}`]=null;updates[`${financePath()}/${id}`]=null;}
+  try{await rtdb.ref().update(updates);selectedIds.clear();}
+  catch(e){alert('Bulk delete failed: '+e.message);}
 });
+
 
 /* ---------- Boot ---------- */
 document.addEventListener('DOMContentLoaded', ()=>{
   render();
   try{ refreshTitleOptions(); refreshClientOptions(); updateDatalist('titleList', getAllTitles()); updateDatalist('clientList', getAllClients()); initCombo('fTitleNew','fTitle','titleList'); initCombo('fClientNew','fClient','clientList'); }catch(e){}
-  startRealtime();
+  setAccessUI(); // Firebase onAuthStateChanged starts listeners after role verification.
 });
 
 /* =========================
    CREATE INVOICE FEATURE
    ========================= */
 const invoiceModal = el('invoiceModal');
-$('#createInvoiceBtn')?.addEventListener('click', ()=>{ openInvoiceModal(); autoPopulateInvoiceMeta(); });
-/* Auto-fill Sushmit on invoice */
+$('#createInvoiceBtn')?.addEventListener('click', ()=>{if(!isOwner())return;openInvoiceModal();autoPopulateInvoiceMeta();});
+/* All clients are permitted inside the Sushmit dashboard; do not prefill a client name. */
 
-$('#createInvoiceBtn')?.addEventListener('click', () => {
-
-  if (activeDashboard !== 'sushmit') {
-    return;
-  }
-
-  setTimeout(() => {
-
-    const client = document.getElementById('invClient');
-
-    if (client) {
-      client.value = 'Sushmit';
-    }
-
-  }, 0);
-
-});
 $('#invoiceCancelBtn')?.addEventListener('click', ()=> invoiceModal.classList.remove('active'));
 invoiceModal?.addEventListener('click', e=>{ if(e.target===invoiceModal) invoiceModal.classList.remove('active'); });
-function openInvoiceModal(){ $('#invoiceModalTitle').textContent='Create Invoice'; invoiceModal.classList.add('active'); setTimeout(()=>$('#invClient').focus(),10); }
+function openInvoiceModal(){ if(!isOwner())return; $('#invoiceModalTitle').textContent='Create Invoice'; invoiceModal.classList.add('active'); setTimeout(()=>$('#invClient').focus(),10); }
 
 const serviceRows = el('serviceRows');
 $('#addServiceRowBtn')?.addEventListener('click', ()=>addServiceRow());
@@ -1326,6 +1146,7 @@ function toIndianWords(num){
 /* ---------- Lightweight PDF Export (~300 KB) ---------- */
 // Uses html2canvas -> JPEG (quality 0.85) + jsPDF A4; avoids huge PNGs.
 $('#downloadPdfBtn')?.addEventListener('click', async ()=>{
+  if(!isOwner())return;
   bindInvoicePreview();
 
   const page = document.querySelector('.a4');
@@ -1394,7 +1215,7 @@ function bindInvoicePreview(){
    EDIT INVOICE (Upload PDF)
    ========================= */
 const editModal = el('editInvoiceModal');
-$('#openEditInvoiceBtn')?.addEventListener('click', ()=>{ openEditInvoiceModal(); });
+$('#openEditInvoiceBtn')?.addEventListener('click', ()=>{if(isOwner())openEditInvoiceModal();});
 $('#editCancelBtn')?.addEventListener('click', ()=> editModal.classList.remove('active'));
 editModal?.addEventListener('click', e=>{ if(e.target===editModal) editModal.classList.remove('active'); });
 
@@ -1579,23 +1400,33 @@ function applyParsedToForm(p){
   if(Number.isFinite(p.discount)) $('#discountInput').value = p.discount;
 }
 
-/* ---------- Export CSV ---------- */
-$('#exportCsvBtn')?.addEventListener('click', ()=>{
-  const rows = [[
-    'Client','Task','Priority','In-Charge','Status','Deadline','Fee','Advance','Outstanding','Invoice Status','Notes','Recurring','Recurring Day','Recurring ID','Period'
-  ]];
-  tasks.forEach(t=>{
-    if (t.recur && !t.period) return;
-    const out = (Number(t.fee||0) - Number(t.advance||0));
-    rows.push([
-      t.client,t.title,t.priority,t.assignee,t.status,fmtDateDDMMYYYY(t.deadline),t.fee,t.advance,out,t.invoiceStatus,(t.notes||'').replace(/\n/g,' '),
-      t.recur? 'Yes':'No', t.recurDay||'', t.recurringId||'', t.period||''
-    ]);
+/* ---------- Export CSV: employees receive ONLY task fields ---------- */
+$('#exportCsvBtn')?.addEventListener('click',()=>{
+  if(!authUser)return;
+  const cols=['Client','Task','Priority','In-Charge','Status','Deadline','Notes'];
+  if(isOwner())cols.push('Fee','Received','Outstanding','Invoice Status','Payment Mode');
+  const rows=[cols];
+  tasks.filter(t=>!(t.recur&&!t.period)).forEach(t=>{
+    const row=[t.client,t.title,t.priority,t.assignee,t.status,fmtDateDDMMYYYY(t.deadline),
+      (t.notes||'').replace(/\n/g,' ')];
+    if(isOwner()){
+      const b=finance[t.id]||{};
+      row.push(b.fee??'',b.advance??'',b.fee==null?'':Number(b.fee)-Number(b.advance||0),
+        b.invoiceStatus||'',b.paymentMode||'');
+    }
+    rows.push(row);
   });
-  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `CA-Tasks-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  const csv=rows.map(row=>row.map(v=>{
+    const raw=String(v??'');
+    const safe=/^[\s]*[=+@\-]/.test(raw)?"'"+raw:raw;
+    return `"${safe.replace(/"/g,'""')}"`;
+  }).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const link=document.createElement('a');link.href=URL.createObjectURL(blob);
+  link.download=`CA-${activeDashboard}-${isOwner()?'owner':'tasks'}-${todayStr()}.csv`;
+  link.click();URL.revokeObjectURL(link.href);
 });
+
 
 
 /* === Combobox for Client Name & Task Title (autofill-proof) === */
@@ -1886,3 +1717,36 @@ $('#exportCsvBtn')?.addEventListener('click', ()=>{
 })();
 
 
+
+/* ===== Dedicated owner-only billing editor ===== */
+let billingTaskId=null;
+function openBilling(id){
+  if(!isOwner())return;
+  const task=tasks.find(t=>t.id===id);if(!task)return;
+  billingTaskId=id;const b=finance[id]||{};
+  el('billingContext').textContent=`${task.client} — ${task.title}`;
+  el('bFee').value=b.fee??'';el('bReceived').value=b.advance??'';
+  el('bInvoiceStatus').value=b.invoiceStatus||'Not Raised';
+  el('bPaymentMode').value=b.paymentMode||'';
+  el('bPrivateNotes').value=b.notes||'';
+  el('billingModal').classList.add('active');
+}
+window.openBilling=openBilling;
+function closeBilling(){el('billingModal').classList.remove('active');billingTaskId=null;}
+el('billingCloseBtn')?.addEventListener('click',closeBilling);
+el('billingModal')?.addEventListener('click',e=>{if(e.target===el('billingModal'))closeBilling();});
+el('billingForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();if(!isOwner()||!billingTaskId)return;
+  const fee=Number(el('bFee').value),advance=Number(el('bReceived').value);
+  if(!Number.isFinite(fee)||!Number.isFinite(advance)||fee<0||advance<0||advance>fee){
+    alert('Enter valid amounts: received must be between zero and the total fee.');return;
+  }
+  const id=billingTaskId;const btn=el('billingSaveBtn');btn.disabled=true;
+  try{
+    await financeRef.child(id).set({fee,advance,invoiceStatus:el('bInvoiceStatus').value,
+      paymentMode:el('bPaymentMode').value,notes:el('bPrivateNotes').value.trim(),
+      updatedAt:Date.now(),updatedBy:authUser.uid});
+    closeBilling();
+  }catch(err){alert('Billing save failed: '+err.message);}
+  finally{btn.disabled=false;}
+});
