@@ -70,3 +70,55 @@ body.employee-mode .table .thead th:nth-child(2){width:auto;}
 .sync-status{font-size:10px;font-weight:700;white-space:nowrap;color:#94a3b8;}
 .sync-status[data-state="live"]{color:#86efac;}
 .sync-status[data-state="error"]{color:#fecaca;}
+
+
+
+/* =========================================
+   LOGIN PAGE BACKGROUND WALLPAPER
+   ========================================= */
+
+.auth-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  background-image:
+    linear-gradient(
+      rgba(10, 20, 30, 0.48),
+      rgba(10, 20, 30, 0.65)
+    ),
+    url("login-wallpaper.jpg");
+
+  background-position: center center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* Login card: retain readability */
+
+.auth-card {
+  background: rgba(35, 47, 58, 0.92);
+
+  border: 1px solid rgba(255, 255, 255, 0.18);
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  box-shadow: 0 20px 65px rgba(0, 0, 0, 0.35);
+}
+
+/* Mobile wallpaper positioning */
+
+@media (max-width: 640px) {
+
+  .auth-screen {
+    background-position: center center;
+    background-size: cover;
+    padding: 20px;
+  }
+
+  .auth-card {
+    width: 100%;
+  }
+}
+
+linear-gradient(rgba(10, 20, 30, 0.45), rgba(10, 20, 30, 0.60)), url("login-wallpaper.jpg")
