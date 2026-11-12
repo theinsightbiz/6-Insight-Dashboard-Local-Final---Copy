@@ -220,7 +220,7 @@ function setAccessUI(){
     ? `${isOwner()?'Owner':'Employee'} · ${authUser.email}` : '';
   if(el('authScreen')) el('authScreen').hidden=signedIn;
   if(el('appRoot')) el('appRoot').setAttribute('aria-hidden',signedIn?'false':'true');
-  ['createInvoiceBtn','bulkDeleteBtn'].forEach(id=>{
+  ['createInvoiceBtn','createQuoteBtn','bulkDeleteBtn'].forEach(id=>{
     const btn=el(id);if(btn)btn.disabled=!isOwner();
   });
   if(el('fRecurring'))el('fRecurring').disabled=!isOwner();
@@ -1749,4 +1749,317 @@ el('billingForm')?.addEventListener('submit',async e=>{
     closeBilling();
   }catch(err){alert('Billing save failed: '+err.message);}
   finally{btn.disabled=false;}
+});
+
+/* =========================
+   CREATE QUOTATION FEATURE (OWNER ONLY)
+   ========================= */
+const quoteModal = el('quoteModal');
+const quoteServiceRows = el('quoteServiceRows');
+
+$('#createQuoteBtn')?.addEventListener('click', () => {
+  if (!isOwner()) return;
+  openQuoteModal();
+  initQuoteForm();
+});
+
+$('#quoteCancelBtn')?.addEventListener('click', () => quoteModal.classList.remove('active'));
+quoteModal?.addEventListener('click', e => {
+  if (e.target === quoteModal) quoteModal.classList.remove('active');
+});
+
+function openQuoteModal() {
+  if (!isOwner()) return;
+  $('#quoteModalTitle').textContent = 'Create Quotation';
+  quoteModal.classList.add('active');
+}
+
+$('#addQuoteRowBtn')?.addEventListener('click', () => addQuoteRow());
+
+function addQuoteRow(desc = '', amt = '') {
+  const idx = quoteServiceRows.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'inv-row';
+  row.innerHTML = `
+    <span>${idx}</span>
+    <input type="text" class="q-desc" placeholder="Task / Assignment description" value="${esc(desc)}">
+    <input type="number" class="q-amt" min="0" step="0.01" placeholder="0.00" value="${amt}">
+    <button type="button" class="btn ghost remove">✖</button>
+  `;
+  quoteServiceRows.appendChild(row);
+
+  row.querySelector('.q-amt').addEventListener('input', recomputeQuoteTotals);
+  row.querySelector('.remove').addEventListener('click', () => {
+    row.remove();
+    [...quoteServiceRows.children].forEach((r, i) => {
+      r.firstElementChild.textContent = String(i + 1);
+    });
+    recomputeQuoteTotals();
+  });
+
+  recomputeQuoteTotals();
+}
+
+function initQuoteForm() {
+  quoteServiceRows.innerHTML = '';
+  addQuoteRow('', '');
+  recomputeQuoteTotals();
+}
+
+function recomputeQuoteTotals() {
+  const amts = $$('.q-amt', quoteServiceRows).map(i => Number(i.value || 0));
+  const grand = amts.reduce((s, n) => s + n, 0);
+  $('#quoteGrandTotal').textContent = fmtMoney(grand);
+  $('#quoteAmountWords').textContent = toIndianWords(Math.round(grand)) + ' only';
+}
+
+function bindQuotePreview() {
+  const msg = ($('#quoteMessage')?.value || '').trim();
+  $$('[data-qbind="message"]').forEach(e => e.textContent = msg);
+  $$('[data-qbind="grandTotal"]').forEach(e => e.textContent = $('#quoteGrandTotal').textContent || '0');
+  $$('[data-qbind="amountWords"]').forEach(e => e.textContent = $('#quoteAmountWords').textContent || '');
+
+  const tbody = document.querySelector('[data-qbind="rows"]');
+  if (tbody) {
+    tbody.innerHTML = '';
+    $$('.inv-row', quoteServiceRows).forEach((r, i) => {
+      const desc = r.querySelector('.q-desc').value.trim();
+      const amt  = Number(r.querySelector('.q-amt').value || 0);
+      if (!desc && !amt) return;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${i + 1}</td><td>${esc(desc)}</td><td class="money">₹ ${fmtMoney(amt)}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Bind editable Terms & Conditions (one line = one numbered point)
+  const termsList = document.querySelector('[data-qbind="terms"]');
+  if (termsList) {
+    const rawTerms = ($('#quoteTerms')?.value || '').split('\n');
+    const cleanTerms = rawTerms
+      .map(line => line.replace(/^\s*\d+[\.\)]\s*/, '').trim())
+      .filter(Boolean);
+    termsList.innerHTML = cleanTerms.map(t => `<li>${esc(t)}</li>`).join('');
+  }
+}
+
+$('#downloadQuotePdfBtn')?.addEventListener('click', () => {
+  if (!isOwner()) return;
+  bindQuotePreview();
+
+  const quoteEl = document.querySelector('#quoteA4 .a4');
+  if (!quoteEl) {
+    alert('Quotation template not found.');
+    return;
+  }
+
+  const quoteTitle = `Quotation_${todayStr()}`;
+  const originalTitle = document.title;
+  document.title = quoteTitle;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentWindow.document;
+
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${quoteTitle}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 0 !important;
+          }
+          * {
+            box-sizing: border-box;
+            font-family: 'Inter', Arial, Helvetica, sans-serif !important;
+            font-size: 12px !important;
+            line-height: 1.5 !important;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            color: #000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .a4 {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 12mm 14mm;
+            margin: 0 auto;
+            background: #fff;
+          }
+          .inv-letterhead {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #000;
+            padding: 4px 0 12px 0;
+            margin-bottom: 14px;
+          }
+          .lh-left {
+            display: flex;
+            align-items: center;
+            padding-left: 28px; /* Positions logo between left edge and center */
+          }
+          .inv-letterhead img {
+            height: 62px; /* Larger logo size (was 48px) */
+            width: auto;
+            object-fit: contain;
+          }
+          .lh-right {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          }
+          .firm-sub {
+            font-size: 11.5px !important;
+            color: #222;
+            line-height: 1.45 !important;
+          }
+          .inv-billto {
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-bottom: 12px;
+          }
+          .box-title {
+            color: #000;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 3px;
+          }
+          .bt-grid {
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 8px;
+            align-items: center;
+          }
+          .bt-grid > div:nth-child(2) {
+            text-align: right;
+          }
+          .bt-grid .money.big {
+            font-size: 16px !important;
+            font-weight: 800 !important;
+            text-align: right;
+            margin-top: 4px;
+          }
+          .inv-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+          }
+          .inv-table th, .inv-table td {
+            border: 1px solid #333;
+            padding: 7px 8px;
+            vertical-align: middle;
+            font-weight: 400;
+          }
+          .inv-table thead th {
+            background-color: #8ab4f8 !important;
+            font-weight: 700 !important;
+            text-align: left;
+          }
+          .inv-table thead th:first-child {
+            width: 55px !important;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .inv-table tbody td:first-child {
+            text-align: center;
+          }
+          .inv-table thead th:last-child,
+          .inv-table td.money,
+          .inv-table th.money {
+            text-align: right;
+            width: 140px;
+            white-space: nowrap;
+          }
+          .inv-table tfoot th {
+            background-color: #fafbfc !important;
+            font-weight: 700 !important;
+          }
+          .inv-table .right {
+            text-align: right;
+          }
+          .inv-table .words {
+            background: #fff;
+            padding: 7px 8px;
+          }
+          .inv-banking {
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin: 12px 0;
+          }
+          .bank-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 4px 16px;
+          }
+          .inv-terms {
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin-top: 12px;
+          }
+          .inv-terms ol {
+            margin: 4px 0 0 18px;
+            padding: 0;
+          }
+          .inv-sign {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            margin-top: 28px;
+            text-align: right;
+          }
+          .inv-sign .sign-name {
+            font-weight: 700 !important;
+          }
+          .inv-sign .sign-title {
+            color: #333;
+          }
+        </style>
+      </head>
+      <body>
+        ${quoteEl.outerHTML}
+      </body>
+    </html>
+  `);
+  doc.close();
+
+  const printWhenReady = () => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => {
+      document.title = originalTitle;
+      document.body.removeChild(iframe);
+    }, 1000);
+  };
+
+  const iframeImg = doc.querySelector('img');
+  if (iframeImg && !iframeImg.complete) {
+    iframeImg.onload = () => setTimeout(printWhenReady, 150);
+    iframeImg.onerror = () => setTimeout(printWhenReady, 150);
+  } else {
+    setTimeout(printWhenReady, 300);
+  }
 });

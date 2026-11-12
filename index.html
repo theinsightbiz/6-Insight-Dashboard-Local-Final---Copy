@@ -78,6 +78,7 @@
         <button class="btn icon primary" id="addTaskBtn" aria-haspopup="dialog">➕ Add Task</button>
         <button class="btn icon" id="sushmitDashboardBtn" type="button">👤 Sushmit</button>
         <button class="btn icon" id="createInvoiceBtn" aria-haspopup="dialog">🧾 Create Invoice</button>
+        <button class="btn icon owner-only" id="createQuoteBtn" aria-haspopup="dialog">📄 Create Quotation</button>
         <button class="btn icon ghost" id="bulkDeleteBtn" title="Delete selected">🗑️ Bulk Delete</button>
         <button class="btn icon ghost" id="exportCsvBtn">⬇️ Export CSV</button>
         <div class="account-chip" aria-live="polite">
@@ -353,11 +354,54 @@
               <div class="tot-row words"><small>Amount (in words): <span id="amountWords">Zero Rupees only</span></small></div>
             </div>
           </div>
+        </div>
 
         <footer>
           <button type="button" class="btn ghost" id="invoiceCancelBtn">Cancel</button>
           <button type="button" class="btn" id="previewInvoiceBtn">Preview</button>
           <button type="button" class="btn primary" id="downloadPdfBtn">Download PDF</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Create Quotation (Owner Only) -->
+  <div class="modal owner-only" id="quoteModal" data-modal="create-invoice" role="dialog" aria-modal="true" aria-labelledby="quoteModalTitle">
+    <div class="dialog">
+      <header><h2 id="quoteModalTitle">Create Quotation</h2></header>
+      <form id="quoteForm">
+        <div class="body">
+          <div>
+            <label>Greeting / Common Line</label>
+            <textarea id="quoteMessage" style="min-height:60px;">Thank you for choosing Sanjeev Sri Ram and Co! We appreciate the opportunity to assist you. Please find below the quotation for your assignments:</textarea>
+          </div>
+
+          <div class="inv-services">
+            <div class="inv-services-head">
+              <h3>Tasks / Assignments</h3>
+              <div class="row-actions">
+                <button type="button" class="btn" id="addQuoteRowBtn">➕ Add Task</button>
+              </div>
+            </div>
+            <div class="inv-grid-head">
+              <span>#</span><span>Description of Task / Assignment</span><span class="money">Amount (₹)</span><span>—</span>
+            </div>
+            <div id="quoteServiceRows"></div>
+            <div class="inv-totals">
+              <div class="tot-row strong"><span>Quotation Amount</span><span class="money">₹ <span id="quoteGrandTotal">0</span></span></div>
+              <div class="tot-row words"><small>Amount (in words): <span id="quoteAmountWords">Zero Rupees only</span></small></div>
+            </div>
+            <div style="margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px;">
+              <label>Terms &amp; Conditions (Enter one point per line)</label>
+              <textarea id="quoteTerms" style="min-height: 75px;">50% advance payment is required to initiate the assignment.
+Government statutory fees or challans (if any) will be charged at actuals.
+E &amp; O Expected.</textarea>
+            </div>
+          </div>
+        </div>
+        <footer>
+          <button type="button" class="btn ghost" id="quoteCancelBtn">Cancel</button>
+          <button type="button" class="btn primary" id="downloadQuotePdfBtn">Download Quotation PDF</button>
         </footer>
       </form>
     </div>
@@ -465,7 +509,76 @@
       <div class="inv-note">Note: This is a computer generated invoice and hence does not require a signature.</div>
 
       <div class="inv-sign">
-        <div class="sign-name">Priyam Adarsh</div>
+        <div class="sign-name">Hrithik Raj</div>
+        <div class="sign-title">Partner/ Authorised Signatory</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden A4 Quotation Template (render target for PDF) -->
+  <div id="quoteA4" class="owner-only" aria-hidden="true">
+    <div class="a4 page">
+      <div class="inv-letterhead">
+        <div class="inv-letterhead" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div class="lh-left" style="padding-left: 16px;">
+          <img src="logo.png" alt="Sanjeev Sri Ram & Co." style="height: 58px; width: auto;">
+        </div>
+        <div class="lh-right" style="margin-left: auto; text-align: right; padding-right: 4px;">
+          <div class="firm-sub">Office No. 34-35, DDA Market, Block C,</div>
+          <div class="firm-sub">Surajmal Vihar, New Delhi- 110092</div>
+          <div class="firm-sub">Mobile: 8676856153 • E-mail: finance@sanjeevsriram.co.in</div>
+          <div class="firm-sub">PAN: ABBFS2273B</div>
+        </div>
+      </div>
+      </div>
+
+      <div class="inv-billto">
+        <div class="box-title">QUOTATION</div>
+        <div class="bt-grid">
+          <div style="padding-right: 16px;">
+            <div data-qbind="message">
+              Thank you for choosing Sanjeev Sri Ram and Co! We appreciate the opportunity to assist you. Please find below the quotation for your assignments:
+            </div>
+          </div>
+          <div>
+            <div><strong>Quotation Amount</strong></div>
+            <div class="money big" style="margin-top: 4px;">₹ <span data-qbind="grandTotal">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <table class="inv-table">
+        <thead>
+          <tr><th style="width:40px">S. No.</th><th>Task / Assignment Description</th><th style="width:160px" class="money">Amount (₹)</th></tr>
+        </thead>
+        <tbody data-qbind="rows"></tbody>
+        <tfoot>
+          <tr class="total"><th colspan="2" class="right">Total Quotation Amount</th><th class="money">₹ <span data-qbind="grandTotal">0</span></th></tr>
+          <tr><td colspan="3" class="words">Quotation Amount (in words): <strong><span data-qbind="amountWords"></span></strong></td></tr>
+        </tfoot>
+      </table>
+
+      <div class="inv-banking">
+        <div class="box-title">Banking Details</div>
+        <div class="bank-grid">
+          <div><strong>Account Holder Name:</strong> SANJEEV SRI RAM AND CO</div>
+          <div><strong>Bank Name:</strong> IDFC First Bank</div>
+          <div><strong>Bank A/c:</strong> 53199905215</div>
+          <div><strong>Bank IFSC:</strong> IDFB0020105</div>
+        </div>
+      </div>
+
+      <div class="inv-terms">
+        <div class="box-title">Terms &amp; Conditions</div>
+        <ol data-qbind="terms">
+          <li>50% advance payment is required to initiate the assignment.</li>
+          <li>Government statutory fees or challans (if any) will be charged at actuals.</li>
+          <li>E &amp; O Expected.</li>
+        </ol>
+      </div>
+
+      <div class="inv-sign">
+        <div class="sign-name">Hrithik Raj</div>
         <div class="sign-title">Partner/ Authorised Signatory</div>
       </div>
     </div>

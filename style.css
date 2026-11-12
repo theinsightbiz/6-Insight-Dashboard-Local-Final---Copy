@@ -1597,6 +1597,47 @@ select optgroup,
 
 }
 
+/* ===== QUOTATION FEATURE STYLING (OWNER ONLY) ===== */
+/* Hide Create Quotation button unless logged in as Owner */
+body.employee-mode #createQuoteBtn,
+body:not(.owner-mode) #createQuoteBtn {
+  display: none !important;
+}
+
+/* 🟣 Create Quotation button */
+#createQuoteBtn {
+  background-color: #8e24aa; /* Purple */
+  color: white;
+  border-color: #8e24aa;
+}
+#createQuoteBtn:hover {
+  background-color: #6a1b9a !important;
+  border-color: #6a1b9a !important;
+}
+
+/* Hide A4 Quotation template on screen */
+#quoteA4 {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  visibility: hidden;
+}
+
+/* Match Quotation modal buttons to Invoice modal */
+#quoteModal .dialog .btn {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  box-shadow: none;
+}
+#quoteModal #downloadQuotePdfBtn:hover,
+#quoteModal #addQuoteRowBtn:hover,
+#quoteModal #quoteCancelBtn:hover {
+  background-color: var(--brand) !important;
+  border-color: var(--brand) !important;
+  color: #fff !important;
+}
+
 
 
 
